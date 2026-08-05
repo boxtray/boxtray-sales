@@ -433,6 +433,24 @@ def ai_search_add_to_crm():
         q("UPDATE search_leads SET added_to_crm=1 WHERE id=?",(lid,)); added += 1
     return jsonify({'ok':True,'added':added})
 
+@app.route('/api/import', methods=['POST'])
+def import_data():
+    """Bulk import customers from JSON."""
+    data = request.json
+    customers = data.get('customers', [])
+    count = 0
+    for c in customers:
+        email = (c.get('email') or '').strip()
+        company = (c.get('company') or '').strip()
+        if email and q1("SELECT id FROM customers WHERE email=?", (email,)): continue
+        if company and q1("SELECT id FROM customers WHERE company=?", (company,)): continue
+        fields = ['company','email','contact_name','title','phone','address','country','region','website','source','channel','grade','notes','company_bio','main_products','product_fit','email_department','customer_base','scale','founded','status','email_sent_date','email_validated','reply_received','reply_summary']
+        vals = [c.get(f, '') for f in fields]
+        ph = ','.join('?' * len(fields))
+        qi(f"INSERT INTO customers ({','.join(fields)}) VALUES ({ph}){RETURNING}", vals)
+        count += 1
+    return jsonify({'ok': True, 'imported': count})
+
 # ------- Main -------
 if __name__ == '__main__':
     with app.app_context():
