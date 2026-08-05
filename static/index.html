@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boxtray Sales System</title>
+<style>
+:root {
+  --primary: #1e40af; --primary-dark: #1e3a8a; --primary-light: #dbeafe; --primary-bg: #eff6ff;
+  --accent: #e11d48; --bg: #f1f5f9; --surface: #fff; --border: #e2e8f0;
+  --text: #0f172a; --text-secondary: #475569; --text-muted: #94a3b8;
+  --green: #16a34a; --green-bg: #f0fdf4; --orange: #ea580c; --orange-bg: #fff7ed;
+  --red: #dc2626; --red-bg: #fef2f2; --blue: #2563eb; --blue-bg: #eff6ff;
+  --radius: 10px; --radius-sm: 8px; --radius-xs: 6px;
+  --font: 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:var(--bg); color:var(--text); display:flex; height:100vh; overflow:hidden; font-size:14px; line-height:1.5; }
+.sidebar { width:240px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; }
+.sidebar-logo { padding:24px 20px 16px; }
+.sidebar-logo h1 { font-size:18px; font-weight:800; color:var(--primary); }
+.sidebar-logo h1 span { color:var(--accent); }
+.sidebar-logo p { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.lang-switch { display:flex; gap:4px; padding:0 20px 16px; }
+.lang-btn { flex:1; padding:5px 0; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:11px; text-align:center; background:var(--bg); color:var(--text-secondary); font-weight:600; }
+.lang-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.sidebar-nav { flex:1; padding:8px 12px; overflow-y:auto; }
+.nav-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:var(--radius-sm); cursor:pointer; font-size:13px; color:var(--text-secondary); font-weight:500; margin-bottom:1px; }
+.nav-item:hover { background:var(--bg); }
+.nav-item.active { background:var(--primary-bg); color:var(--primary); font-weight:600; }
+.nav-badge { margin-left:auto; background:var(--accent); color:#fff; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:700; min-width:20px; text-align:center; }
+.main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.header { padding:16px 32px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); background:var(--surface); }
+.header h2 { font-size:20px; font-weight:700; }
+.content { flex:1; overflow-y:auto; padding:24px 32px; }
+.panel { display:none; }
+.panel.active { display:block; }
+
+.stat-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+.stat-card { background:var(--surface); border-radius:var(--radius); padding:20px 24px; border:1px solid var(--border); }
+.stat-card .num { font-size:32px; font-weight:800; }
+.stat-card .label { font-size:12px; color:var(--text-muted); margin-top:4px; }
+.stat-card.pink .num { color:var(--primary); }
+.stat-card.green .num { color:var(--green); }
+.stat-card.orange .num { color:var(--orange); }
+.stat-card.blue .num { color:var(--blue); }
+
+.table-wrap { background:var(--surface); border-radius:var(--radius); border:1px solid var(--border); overflow:hidden; }
+.toolbar { display:flex; gap:10px; padding:14px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
+.toolbar input, .toolbar select { padding:7px 12px; border:1px solid var(--border); border-radius:var(--radius-xs); font-size:13px; font-family:var(--font); }
+.toolbar input:focus, .toolbar select:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-light); }
+.toolbar input { width:220px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { padding:10px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:11px; text-transform:uppercase; background:#f8fafc; border-bottom:1px solid var(--border); }
+td { padding:10px 16px; border-bottom:1px solid var(--border); }
+tbody tr:hover { background:#f8fafc; }
+tbody tr:last-child td { border-bottom:none; }
+
+.badge { display:inline-flex; align-items:center; gap:4px; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+.badge::before { content:''; width:6px; height:6px; border-radius:50%; }
+.badge-A { background:var(--green-bg); color:var(--green); } .badge-A::before { background:var(--green); }
+.badge-B { background:var(--blue-bg); color:var(--blue); } .badge-B::before { background:var(--blue); }
+.badge-C { background:var(--orange-bg); color:var(--orange); } .badge-C::before { background:var(--orange); }
+.badge-D { background:#f8fafc; color:var(--text-muted); } .badge-D::before { background:var(--text-muted); }
+.badge-sent { background:var(--green-bg); color:var(--green); } .badge-sent::before { background:var(--green); }
+.badge-new { background:var(--orange-bg); color:var(--orange); } .badge-new::before { background:var(--orange); }
+
+.btn { padding:8px 18px; border:none; border-radius:var(--radius-xs); cursor:pointer; font-size:13px; font-weight:600; font-family:var(--font); display:inline-flex; align-items:center; gap:6px; }
+.btn-primary { background:var(--primary); color:#fff; }
+.btn-primary:hover { background:var(--primary-dark); }
+.btn-outline { background:var(--surface); border:1px solid var(--border); color:var(--text-secondary); }
+.btn-outline:hover { background:var(--bg); }
+.btn-sm { padding:5px 12px; font-size:12px; }
+.btn-success { background:var(--green); color:#fff; }
+.btn-danger { background:var(--red); color:#fff; }
+
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.4); z-index:100; align-items:center; justify-content:center; }
+.modal-overlay.show { display:flex; }
+.modal { background:var(--surface); border-radius:var(--radius); width:92%; max-width:900px; max-height:85vh; overflow-y:auto; box-shadow:0 25px 50px rgba(0,0,0,.15); }
+.modal-header { padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; background:var(--surface); }
+.modal-header h3 { font-size:16px; font-weight:700; }
+.modal-close { cursor:pointer; font-size:20px; color:var(--text-muted); }
+.modal-body { padding:24px; }
+.modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; background:var(--bg); }
+
+.form-group { margin-bottom:16px; }
+.form-group label { display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; }
+.form-group input, .form-group select, .form-group textarea { width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:var(--radius-xs); font-size:13px; font-family:var(--font); }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-light); }
+.form-row { display:flex; gap:14px; }
+.form-row .form-group { flex:1; }
+textarea { resize:vertical; min-height:80px; }
+
+.task-item { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 18px; display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:8px; }
+.task-item.overdue { border-left:3px solid var(--red); }
+.task-item.today { border-left:3px solid var(--orange); }
+
+.toast { position:fixed; top:24px; right:24px; padding:12px 20px; border-radius:var(--radius-xs); color:#fff; font-size:13px; z-index:200; opacity:0; transition:opacity .3s; pointer-events:none; }
+.toast.show { opacity:1; }
+.toast-success { background:var(--green); }
+.toast-error { background:var(--red); }
+
+.clickable { cursor:pointer; color:var(--primary); font-weight:500; }
+.clickable:hover { text-decoration:underline; }
+
+@media (max-width:1024px) { .stat-cards { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="sidebar-logo"><img src="/static/logo.png" alt="Boxtray" style="height:48px;margin-bottom:6px"><h1>Boxtray Sales System</h1><p>Customer Development CRM</p></div>
+  <div class="lang-switch"><button class="lang-btn active" onclick="setLang('zh')">中文</button><button class="lang-btn" onclick="setLang('en')">EN</button></div>
+  <div class="sidebar-nav">
+    <div class="nav-item active" data-panel="dashboard"><span>📊</span> <span data-l="nav_dashboard">Dashboard</span></div>
+    <div class="nav-item" data-panel="search"><span>🔍</span> <span data-l="nav_search">Find Customers</span></div>
+    <div class="nav-item" data-panel="customers"><span>👥</span> <span data-l="nav_customers">Customers</span> <span class="nav-badge" id="nav-cust-count">-</span></div>
+    <div class="nav-item" data-panel="email"><span>✉️</span> <span data-l="nav_email">Email Center</span></div>
+    <div class="nav-item" data-panel="tasks"><span>📋</span> <span data-l="nav_tasks">Tasks</span> <span class="nav-badge" id="nav-task-count">-</span></div>
+    <div class="nav-item" data-panel="channels"><span>📈</span> <span data-l="nav_channels">Channels</span></div>
+    <div class="nav-item" data-panel="dupes"><span>🔄</span> <span data-l="nav_dupes">Duplicates</span></div>
+    <div class="nav-item" data-panel="blacklist"><span>🚫</span> <span data-l="nav_blacklist">Blacklist</span></div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="header"><h2 id="ptitle">Dashboard</h2><div id="htime" style="font-size:12px;color:var(--text-muted)"></div></div>
+  <div class="content">
+    <div class="panel active" id="panel-dashboard"><div id="dstats"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px"><div class="table-wrap"><div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">By Region</div><div style="padding:16px" id="dregions"></div></div><div class="table-wrap"><div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">By Grade</div><div style="padding:16px" id="dgrades"></div></div></div></div>
+
+    <div class="panel" id="panel-search">
+      <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+        <div class="form-group" style="flex:1;min-width:200px"><label>Keywords (leave blank for auto-match)</label><input id="skw" placeholder="Auto: salt pepper grinder spices gourmet"></div>
+        <div class="form-group" style="width:200px"><label>Market</label><select id="smkt"><option value="">All Markets</option><optgroup label="Australia"><option value="AU">Australia</option></optgroup><optgroup label="North America"><option value="NA">All North America</option><option value="US">United States</option><option value="CA">Canada</option></optgroup><optgroup label="Southeast Asia"><option value="SEA">All SE Asia</option><option value="SG">Singapore</option><option value="MY">Malaysia</option><option value="TH">Thailand</option><option value="ID">Indonesia</option></optgroup><optgroup label="Middle East"><option value="ME">All Middle East</option><option value="AE">UAE</option><option value="SA">Saudi Arabia</option><option value="QA">Qatar</option><option value="KW">Kuwait</option></optgroup></select></div>
+        <div class="form-group" style="width:200px"><label>Customer Type</label><select id="stype"><option value="">All Types</option><option value="distributor+wholesaler">Distributor / Wholesaler</option><option value="importer">Food Importer</option><option value="supermarket+grocery">Supermarket / Grocery</option><option value="specialty+gourmet">Specialty / Gourmet</option><option value="spice+seasoning">Spice Specialist</option><option value="food+service">Food Service</option></select></div>
+        <button class="btn btn-primary" onclick="doSearch()" id="btn-search">Find Customers</button>
+      </div>
+      <div id="sstatus" style="font-size:12px;margin-bottom:8px"></div>
+      <div class="table-wrap" id="sresults" style="display:none"></div>
+      <button class="btn btn-outline btn-sm" onclick="showAdd()" style="margin-top:16px">+ Add Manually</button>
+    </div>
+
+    <div class="panel" id="panel-customers">
+      <div class="toolbar">
+        <input id="cfilter" placeholder="Search..." oninput="loadCustomers()">
+        <select id="cgrade" onchange="loadCustomers()"><option value="">All Grades</option><option>A</option><option>B</option><option>C</option><option>D</option></select>
+        <select id="cregion" onchange="loadCustomers()"><option value="">All Regions</option><option>AU</option><option>NA</option><option>SEA</option><option>ME</option></select>
+        <select id="cstatus" onchange="loadCustomers()"><option value="">All Status</option><option value="new">New</option><option value="sent">Sent</option><option value="replied">Replied</option></select>
+        <button class="btn btn-outline btn-sm" onclick="batchOp('grade')">Set Grade</button>
+        <button class="btn btn-outline btn-sm" onclick="batchOp('blacklist')">Blocklist</button>
+        <button class="btn btn-primary btn-sm" onclick="showAdd()">+ Add</button>
+      </div>
+      <div class="table-wrap" style="overflow-x:auto"><table><thead id="cthead"></thead><tbody id="ctbody"></tbody></table></div>
+    </div>
+
+    <div class="panel" id="panel-email">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="table-wrap">
+          <div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Step 1: Select Template</div>
+          <div style="padding:10px 16px"><select id="etpl" style="width:100%;padding:8px" onchange="previewEmail()"><option value="">-- Select --</option></select></div>
+          <div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Step 2: Select Customers</div>
+          <div style="padding:10px 16px;max-height:260px;overflow-y:auto" id="elist"></div>
+          <div style="padding:8px 16px;border-top:1px solid var(--border)"><label style="font-size:11px;cursor:pointer"><input type="checkbox" id="eall" onchange="emailToggleAll()"> Select All</label> <span id="ecnt" style="font-size:11px;color:var(--text-muted)">0 selected</span></div>
+          <div style="padding:10px 16px;display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="sendBatch('approval')">Send for Approval</button><button class="btn btn-success btn-sm" onclick="sendBatch('direct')">Send Direct</button></div>
+        </div>
+        <div class="table-wrap">
+          <div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Preview</div>
+          <div style="padding:16px;font-size:13px;white-space:pre-wrap;max-height:340px;overflow-y:auto;line-height:1.7" id="epreview">Select a template to preview.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-tasks">
+      <div style="display:flex;gap:12px;margin-bottom:16px"><button class="btn btn-primary" onclick="genTasks()">Auto-Generate Follow-ups</button></div>
+      <div id="tlist"></div>
+    </div>
+
+    <div class="panel" id="panel-channels"><div class="table-wrap"><div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Channel Performance</div><div style="padding:20px" id="chstats"></div></div></div>
+
+    <div class="panel" id="panel-dupes"><button class="btn btn-outline" onclick="checkDupes()" style="margin-bottom:12px">Scan</button><div id="dupres"></div></div>
+
+    <div class="panel" id="panel-blacklist"><div class="table-wrap"><table><thead><tr><th>Company</th><th>Email</th><th>Reason</th><th>Action</th></tr></thead><tbody id="blbody"></tbody></table></div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mdl-cust"><div class="modal"><div class="modal-header"><h3 id="mdl-title">Customer</h3><span class="modal-close" onclick="hideMdl('mdl-cust')">x</span></div><div class="modal-body" id="mdl-cust-body"></div></div></div>
+<div class="modal-overlay" id="mdl-add"><div class="modal"><div class="modal-header"><h3>Add Customer</h3><span class="modal-close" onclick="hideMdl('mdl-add')">x</span></div><div class="modal-body"><div class="form-row"><div class="form-group"><label>Company *</label><input id="acompany"></div><div class="form-group"><label>Email</label><input id="aemail"><button type="button" class="btn btn-outline btn-sm" style="margin-top:4px" onclick="validateEmail()">Validate</button><span id="aestatus" style="font-size:11px;margin-left:8px"></span></div></div><div class="form-row"><div class="form-group"><label>Contact</label><input id="acontact"></div><div class="form-group"><label>Title</label><input id="atitle"></div></div><div class="form-row"><div class="form-group"><label>Phone</label><input id="aphone"></div><div class="form-group"><label>Country</label><input id="acountry"></div></div><div class="form-row"><div class="form-group"><label>Region</label><select id="aregion"><option value="">--</option><option>AU</option><option>NA</option><option>SEA</option><option>ME</option></select></div><div class="form-group"><label>Grade</label><select id="agrade"><option>C</option><option>A</option><option>B</option><option>D</option></select></div></div><div class="form-row"><div class="form-group"><label>Channel</label><input id="achannel"></div><div class="form-group"><label>Website</label><input id="awebsite"></div></div><div class="form-group"><label>Notes</label><textarea id="anotes" rows="2"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="hideMdl('mdl-add')">Cancel</button><button class="btn btn-primary" onclick="saveCustomer()">Save</button></div></div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var EMBEDDED_DATA = {"customers": [{"id": 1, "company": "Indya Foods Pty Ltd", "email": "indyafoods@indyafoods.com.au", "contact_name": "", "title": "", "phone": "+61 3 9793 5373", "address": "51-55 Smeaton Ave, Dandenong South VIC 3175", "country": "Australia", "region": "AU", "website": "indyafoods.com.au", "source": "web_search", "channel": "", "grade": "C", "tier": "T2 - Medium Priority", "score": 2.5, "status": "sent", "tags": "", "company_bio": "One of Australia's largest food importers, wholesalers & distributors. Sources from India, Malaysia, Thailand, Dubai, Canada. Over 20 years in business.", "main_products": "Dry groceries (flour, spices, rice, snacks, noodles, oils, pulses), beverages, frozen foods, cosmetics, utensils. 5000+ SKUs.", "product_fit": "Carries extensive spices, seasonings, salt (Tata Salt distributor). Salt & pepper grinders fit perfectly in their spice/dry grocery portfolio.", "email_department": "General Inquiry (indyafoods@... — used as main contact on website)", "customer_base": "Major chains (Coles, Woolworths, Costco, IGA) + 3550+ retail stores + 1200+ distributors", "scale": "5000+ products, 5 warehouses (Melbourne/Sydney/Brisbane/Adelaide/Perth), nationwide", "founded": "2000s (~20+ years)", "notes": "Large importer/wholesaler/distributor from India, Malaysia, Thailand, Dubai, Canada.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-7-28", "email_sent_date": "2026-8-3", "preview_sent_date": "2026-7-28", "template_used": "detailed-version (cold outreach)", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 2, "company": "Dhara Foods International", "email": "dharafoods14@gmail.com", "contact_name": "Praveen", "title": "", "phone": "+61 2 9607 2219", "address": "93/97 Newton Rd, Wetherill Park NSW 2164", "country": "Australia", "region": "AU", "website": "singh.com.au", "source": "web_search", "channel": "", "grade": "C", "tier": "T2 - Medium Priority", "score": 3.0, "status": "sent", "tags": "", "company_bio": "Indian import-export company in Sydney. Focus on branded Indian food products for grocery stores, restaurants, hotels. Own brands: Fasal, Mansa, Raamabhoj.", "main_products": "Tata Salt, Aasirwaad Atta, Pillsbury Atta, Maggi Noodles, branded spices, pickles, drinks, oils.", "product_fit": "Already distributes Tata Salt — strong salt buyer. Premium salt/pepper grinders complement existing spice & salt portfolio.", "email_department": "General/Contact Email (dharafoods14@gmail.com — contact person: Praveen)", "customer_base": "Grocery stores, restaurants, hotels, catering businesses, retail stores across Australia.", "scale": "Regional distributor (Sydney metro + beyond), multiple international sources.", "founded": "Unknown", "notes": "Indian import-export, distributor of branded spices (Tata Salt, etc.)", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-7-28", "email_sent_date": "2026-8-3", "preview_sent_date": "2026-7-28", "template_used": "detailed-version (cold outreach)", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 3, "company": "Mahi Foods Inc", "email": "mahifoodinc@gmail.com", "contact_name": "", "title": "", "phone": "+1 313 831 8000", "address": "2730 Orleans St, Detroit MI 48207", "country": "USA", "region": "NA", "website": "mahifoodsinc.com", "source": "web_search", "channel": "", "grade": "C", "tier": "T2 - Medium Priority", "score": 3.0, "status": "sent", "tags": "", "company_bio": "Top wholesale supplier for Bangladeshi, Indian, Pakistani, Middle Eastern & Nepali spices and foods. Founded 2012, Detroit MI.", "main_products": "Spices, herbs, sauces, pastes, dry foods. Asian & Middle Eastern specialty.", "product_fit": "Spice and seasoning specialist — premium salt/pepper grinders align directly with core product line.", "email_department": "General Contact (mahifoodinc@gmail.com)", "customer_base": "Grocery stores, restaurants, ethnic markets.", "scale": "Since 2012, growing rapidly. Detroit metro.", "founded": "2012", "notes": "Wholesale spices, herbs, sauces. Asian/Middle Eastern focus.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-7-28", "email_sent_date": "2026-8-3", "preview_sent_date": "2026-7-28", "template_used": "detailed-version (cold outreach)", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 4, "company": "Mii FoodService Pte Ltd", "email": "sales@miifoodservice.com", "contact_name": "", "title": "", "phone": "+65 6745 0543", "address": "25 Bukit Batok Crescent, Singapore 658066", "country": "Singapore", "region": "SEA", "website": "miifoodsupply.com", "source": "web_search", "channel": "", "grade": "C", "tier": "T3 - Low Priority", "score": 2.0, "status": "sent", "tags": "", "company_bio": "Multi-location food supplier with branches in Malaysia (Kuching, KL) and Singapore. Serving food service and retail.", "main_products": "General food supply including spices, dry goods, food ingredients.", "product_fit": "General food supplier — moderate fit. Would need to confirm spice/salt interest.", "email_department": "Sales Department (sales@miifoodservice.com)", "customer_base": "Food service businesses, retailers in Singapore & Malaysia.", "scale": "3 locations (Kuching, KL, Singapore). Small-medium enterprise.", "founded": "Unknown", "notes": "Singapore branch of Mii Food group.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-7-28", "email_sent_date": "2026-8-3", "preview_sent_date": "2026-7-28", "template_used": "detailed-version (cold outreach)", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 5, "company": "Dawood Trading & Wholesale Pte Ltd", "email": "dawoodspices786@gmail.com", "contact_name": "", "title": "", "phone": "+65 6445 0733", "address": "3017 Bedok North St 5, Singapore 486121", "country": "Singapore", "region": "SEA", "website": "dawoodspices.com", "source": "web_search", "channel": "", "grade": "C", "tier": "T2 - Medium Priority", "score": 3.0, "status": "sent", "tags": "", "company_bio": "Spice wholesaler and trading company in Singapore with factory outlet + retail outlet. Family-owned.", "main_products": "Wholesale spices, seasonings. Factory outlet processing.", "product_fit": "Direct spice trader — premium salt/pepper grinders could add value to their portfolio. Interest in high-quality ingredients.", "email_department": "General Contact (dawoodspices786@gmail.com — Google account, small business)", "customer_base": "Retail customers + wholesale trade in Singapore.", "scale": "Small-medium. Factory outlet + 1 retail outlet.", "founded": "Unknown", "notes": "Spice wholesaler with factory outlet + retail outlet in Singapore.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-7-28", "email_sent_date": "2026-8-3", "preview_sent_date": "2026-7-28", "template_used": "detailed-version (cold outreach)", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 6, "company": "Mur Thai Food Co", "email": "murthaifood168@gmail.com", "contact_name": "", "title": "", "phone": "", "address": "", "country": "Australia", "region": "AU", "website": "murthaifood.com.au", "source": "web_search", "channel": "", "grade": "C", "tier": "T1 - High Priority", "score": 3.5, "status": "new", "tags": "", "company_bio": "Premier Australian importer & distributor of Asian food & consumer products. Family-owned. Sources from 10+ Asian countries including Thailand, Vietnam, China, Malaysia. Actively seeking new suppliers.", "main_products": "Rice, oils, noodles, sauces, spices, beverages, snacks, frozen products, household items. Carries own label brands from Asian manufacturers.", "product_fit": "Already imports spices and sauces from Asia. Strong fit for Vietnamese pepper + salt products. Actively seeking suppliers.", "email_department": "General Inquiry (murthaifood168@gmail.com — contact for new supplier submissions)", "customer_base": "Supermarkets, grocery stores, food service across Australia.", "scale": "3 warehouses (Sydney HQ + Melbourne + Brisbane), nationwide distribution.", "founded": "Unknown", "notes": "Importer/distributor Asian food from Thailand, Vietnam, China. Actively seeking new suppliers.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-8-3", "email_sent_date": "", "preview_sent_date": "", "template_used": "", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 7, "company": "Macar & Sons Inc", "email": "support@macarfoods.com", "contact_name": "", "title": "", "phone": "+1 954 686 6213", "address": "1401 Green Rd, Pompano Beach FL", "country": "USA", "region": "NA", "website": "macarfoods.com", "source": "web_search", "channel": "", "grade": "C", "tier": "T1 - High Priority", "score": 4.0, "status": "new", "tags": "", "company_bio": "Direct importer & distributor of Mediterranean specialty foods. Since 1995. Tri-temperature warehouse (dry/refrigerated/frozen). Full cold chain, private label program (SQF/GFSI certified). Own customs, logistics & FDA departments.", "main_products": "1500+ items across 15 departments: dairy, halal meats, groceries (olive oil, olives, pulses, sauces, pasta, SEASONING & SPICES), dried fruit/nuts, confectionery, frozen, honey, etc. 150+ brands.", "product_fit": "Carries Seasoning & Spices category. Private label program is a PERFECT match. Has own FDA/customs — experienced in imports. Actively seeking new brands via website.", "email_department": "Customer Support / Sales Inquiry (support@macarfoods.com — also has dedicated Brand/Manufacturer submission form on contact page)", "customer_base": "Ethnic grocers, restaurants, hotels, caterers, food service — all 50 states. 1-3 day delivery.", "scale": "1500+ SKUs, 150+ brands, 50-state coverage, tri-temp warehouse in FL. Since 1995.", "founded": "1995", "notes": "Importer distrib. specialty foods. Has Brand seeking US distribution program. All 50 states. ACTIVELY SEEKS new products.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-8-3", "email_sent_date": "", "preview_sent_date": "", "template_used": "", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 8, "company": "Gourmet Imports", "email": "sales@gourmetimports.com", "contact_name": "", "title": "", "phone": "+1 626 570 6900", "address": "961 S Meridian Ave, Alhambra CA", "country": "USA", "region": "NA", "website": "gourmetimports.com", "source": "web_search", "channel": "", "grade": "C", "tier": "T1 - High Priority", "score": 3.5, "status": "new", "tags": "", "company_bio": "Los Angeles-based importer & distributor of specialty/gourmet foods. Founded 1989 by French-born Nicole Grandjean. Focus on bridging producer and chef.", "main_products": "2000+ culinary items: 300+ cheeses, caviar, charcuterie, oils, vinegars, chocolate, baking/pastry ingredients, truffles, specialty meats, SPICES.", "product_fit": "Carries spices and gourmet ingredients. Premium salt/pepper grinders fit their upscale chef-focused portfolio.", "email_department": "Sales Department (sales@gourmetimports.com)", "customer_base": "Chefs and culinary professionals, specialty food stores.", "scale": "2000+ items, since 1989. LA metro.", "founded": "1989", "notes": "LA importer/distrib. since 1989. 2000+ gourmet items: oils, vinegars, salts. Chefs + food service.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-8-3", "email_sent_date": "", "preview_sent_date": "", "template_used": "", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 9, "company": "Expowide Global Trading FZC", "email": "marketing@expowide.net", "contact_name": "", "title": "", "phone": "+91 92821 12978", "address": "Sharjah Research Park, Sharjah UAE", "country": "UAE", "region": "ME", "website": "expowide.net", "source": "web_search", "channel": "", "grade": "C", "tier": "T1 - High Priority", "score": 3.5, "status": "new", "tags": "", "company_bio": "UAE-based global food sourcing & trading partner. Specializes in custom product development, private labeling, consolidation services, and logistics. ISO 17025 certified labs.", "main_products": "Jams, sauces, ketchup, mayonnaise, salad dressing, mustard, SPICES, coffee, tea, biscuits, eggs, food ingredients. Private label focus.", "product_fit": "Carries spices. Private label service is a direct match for Signature Senses as OEM partner. UAE gateway to Middle East markets.", "email_department": "Marketing / B2B Inquiry (marketing@expowide.net — listed for product/business enquiries)", "customer_base": "International food brands, UN peacekeeping missions, B2B clients globally.", "scale": "18+ years in business. Global sourcing network.", "founded": "2008 (~18 years)", "notes": "UAE supplier 18+ years. Spices, salt, sugar. Private label + B2B.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-8-3", "email_sent_date": "", "preview_sent_date": "", "template_used": "", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 10, "company": "Gowda Hills Spices Trading LLC", "email": "sales@ghspices.com", "contact_name": "", "title": "", "phone": "+971 55 434 6569", "address": "DIC, Dubai Industrial City, Dubai", "country": "UAE", "region": "ME", "website": "ghspices.com", "source": "web_search", "channel": "", "grade": "C", "tier": "T2 - Medium Priority", "score": 3.0, "status": "new", "tags": "", "company_bio": "Dubai Mainland licensed spice trading company. Focus on spices, nuts, coffee. Strong India-UAE supply chain.", "main_products": "Spices, nuts, coffee. Wholesale + export program.", "product_fit": "Spice specialist — premium salt/pepper grinders fit their spice portfolio. Potential Dubai distribution gateway.", "email_department": "Sales Department (sales@ghspices.com)", "customer_base": "Middle East + export markets.", "scale": "Small-medium. Single office in Dubai Industrial City.", "founded": "Unknown", "notes": "Dubai spices, nuts, coffee. India-UAE supply chain. Wholesale + export.", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 08:35:21", "updated_at": "2026-08-04 08:35:21", "email_validated": "Yes", "email_validation_date": "2026-8-3", "email_sent_date": "", "preview_sent_date": "", "template_used": "", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 11, "company": "Retail Food Distribution UAE Services", "email": "info@sourceinternational.ae", "contact_name": "", "title": "", "phone": "", "address": "", "country": "ME", "region": "ME", "website": "sourceinternational.ae", "source": "DuckDuckGo → sourceinternational.ae", "channel": "", "grade": "C", "tier": "", "score": 0.0, "status": "awaiting_approval", "tags": "", "company_bio": "", "main_products": "", "product_fit": "", "email_department": "", "customer_base": "", "scale": "", "founded": "", "notes": "Email: info@sourceinternational.ae.A prominent UAE-based food importer and distributor faced escalating operational costs and inefficiencies in their “retail food distribution UAE” network. Their manu", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 09:42:19", "updated_at": "2026-08-04 09:42:19", "email_validated": "No", "email_validation_date": "", "email_sent_date": "", "preview_sent_date": "2026-08-04 10:33:10", "template_used": "Premium Salt & Pepper Grinders — BRC/BSCI Factory, Kosher Certified", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}, {"id": 12, "company": "Frozen food importers in Dammam", "email": "export@snowfresh-eg.com", "contact_name": "", "title": "", "phone": "", "address": "", "country": "ME", "region": "ME", "website": "pinterest.com", "source": "DuckDuckGo → pinterest.com", "channel": "", "grade": "C", "tier": "", "score": 0.0, "status": "new", "tags": "", "company_bio": "", "main_products": "", "product_fit": "", "email_department": "", "customer_base": "", "scale": "", "founded": "", "notes": "MKTC - Food Trading Company - Food Importer & Distributor in Saudi Arabia.Description. Choose all of your requirements from our frozen veggies range Mail: export@snowfresh-eg.com #frozen #iqf #carrots", "is_blacklisted": 0, "blacklist_reason": "", "created_at": "2026-08-04 12:35:41", "updated_at": "2026-08-04 12:35:41", "email_validated": "No", "email_validation_date": "", "email_sent_date": "", "preview_sent_date": "", "template_used": "", "follow_up_count": 0, "last_follow_up_date": "", "reply_received": "No", "reply_date": "", "reply_summary": "", "next_task_date": "", "task_notes": ""}], "emails": [{"id": 2, "customer_id": 11, "to_email": "info@sourceinternational.ae", "subject": "Premium Salt & Pepper Grinders — BRC/BSCI Factory, Kosher Certified", "body": "Hi there,\n\nI'm Karen from Signature Senses. We manufacture premium salt and pepper grinders from our BRC and BSCI certified facility.\n\nHere's what sets us apart:\n\nTHE SALT\nSourced from pristine Australian waters. Natural solar evaporation. High purity. Rich in natural minerals. No artificial additives — just clean, crisp sea salt.\n\nTHE PEPPER\nSingle-origin black pepper from Vietnam, the world's largest and most consistent producer. Exceptionally high piperine content for a powerful, aromatic kick that stands out.\n\nTHE GRINDER\nBuilt-in ceramic mechanism. Grind fresh in seconds. Refillable glass bottle — reusable, eco-friendly, and designed to look great on any table or countertop.\n\nCERTIFICATIONS\n- BRC Certified Factory\n- BSCI Certified Factory\n- Kosher Certified (Salt & Pepper)\n\nWe also offer flexible packaging options beyond the grinder — bulk packs, gift sets, and seasonal formats.\n\nI'd love to send you our full product catalog and discuss how Signature Senses could fit your range. Would you be open to a quick look?\n\nBest,\nKaren\nSales Manager\nSignature Senses\nsales@boxtray.com | www.boxtray.com", "type": "outreach", "status": "approval_pending", "sent_at": "2026-08-04 10:33:10", "reply_text": ""}, {"id": 1, "customer_id": 11, "to_email": "info@sourceinternational.ae", "subject": "Premium Salt & Pepper Grinders — BRC/BSCI Factory, Kosher Certified", "body": "Hi there,\n\nI'm Karen from Signature Senses. We manufacture premium salt and pepper grinders from our BRC and BSCI certified facility.\n\nHere's what sets us apart:\n\nTHE SALT\nSourced from pristine Australian waters. Natural solar evaporation. High purity. Rich in natural minerals. No artificial additives — just clean, crisp sea salt.\n\nTHE PEPPER\nSingle-origin black pepper from Vietnam, the world's largest and most consistent producer. Exceptionally high piperine content for a powerful, aromatic kick that stands out.\n\nTHE GRINDER\nBuilt-in ceramic mechanism. Grind fresh in seconds. Refillable glass bottle — reusable, eco-friendly, and designed to look great on any table or countertop.\n\nCERTIFICATIONS\n- BRC Certified Factory\n- BSCI Certified Factory\n- Kosher Certified (Salt & Pepper)\n\nWe also offer flexible packaging options beyond the grinder — bulk packs, gift sets, and seasonal formats.\n\nI'd love to send you our full product catalog and discuss how Signature Senses could fit your range. Would you be open to a quick look?\n\nBest,\nKaren\nSales Manager\nSignature Senses\nsales@boxtray.com | www.boxtray.com", "type": "outreach", "status": "approval_pending", "sent_at": "2026-08-04 10:33:07", "reply_text": ""}], "tasks": [{"id": 1, "customer_id": 1, "title": "Day 3 Light Touch", "due_date": "2026-08-06", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 5, "customer_id": 2, "title": "Day 3 Light Touch", "due_date": "2026-08-06", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 9, "customer_id": 3, "title": "Day 3 Light Touch", "due_date": "2026-08-06", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 13, "customer_id": 4, "title": "Day 3 Light Touch", "due_date": "2026-08-06", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 17, "customer_id": 5, "title": "Day 3 Light Touch", "due_date": "2026-08-06", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 2, "customer_id": 1, "title": "Day 7 Value Add", "due_date": "2026-08-10", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 6, "customer_id": 2, "title": "Day 7 Value Add", "due_date": "2026-08-10", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 10, "customer_id": 3, "title": "Day 7 Value Add", "due_date": "2026-08-10", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 14, "customer_id": 4, "title": "Day 7 Value Add", "due_date": "2026-08-10", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 18, "customer_id": 5, "title": "Day 7 Value Add", "due_date": "2026-08-10", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 3, "customer_id": 1, "title": "Day 14 Last Attempt", "due_date": "2026-08-17", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 7, "customer_id": 2, "title": "Day 14 Last Attempt", "due_date": "2026-08-17", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 11, "customer_id": 3, "title": "Day 14 Last Attempt", "due_date": "2026-08-17", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 15, "customer_id": 4, "title": "Day 14 Last Attempt", "due_date": "2026-08-17", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 19, "customer_id": 5, "title": "Day 14 Last Attempt", "due_date": "2026-08-17", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 4, "customer_id": 1, "title": "Day 30 Closing Loop", "due_date": "2026-09-02", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 8, "customer_id": 2, "title": "Day 30 Closing Loop", "due_date": "2026-09-02", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 12, "customer_id": 3, "title": "Day 30 Closing Loop", "due_date": "2026-09-02", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 16, "customer_id": 4, "title": "Day 30 Closing Loop", "due_date": "2026-09-02", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}, {"id": 20, "customer_id": 5, "title": "Day 30 Closing Loop", "due_date": "2026-09-02", "type": "follow_up", "status": "pending", "notes": "", "created_at": "2026-08-04 08:35:21"}]};
+var P = 'dashboard';
+var A = '/api';
+var L = localStorage.getItem('crm_lang')||'zh';
+var T = {zh:{nav_dashboard:'仪表盘',nav_search:'客户搜索',nav_customers:'客户档案',nav_email:'邮件中心',nav_tasks:'待办任务',nav_channels:'渠道统计',nav_dupes:'查重检测',nav_blacklist:'黑名单',th_company:'公司',th_email:'邮箱',th_grade:'等级',th_region:'区域',th_status:'状态',th_sent:'发送日',th_actions:'操作',grade_a:'A - 高意向',grade_b:'B - 普通意向',grade_c:'C - 待培育',grade_d:'D - 无效',status_sent:'已发送',status_new:'新客户',status_replied:'已回复'},en:{nav_dashboard:'Dashboard',nav_search:'Find Customers',nav_customers:'Customers',nav_email:'Email Center',nav_tasks:'Tasks',nav_channels:'Channels',nav_dupes:'Duplicates',nav_blacklist:'Blacklist',th_company:'Company',th_email:'Email',th_grade:'Grade',th_region:'Region',th_status:'Status',th_sent:'Sent',th_actions:'Actions',grade_a:'A - High',grade_b:'B - Medium',grade_c:'C - Nurturing',grade_d:'D - Invalid',status_sent:'Sent',status_new:'New',status_replied:'Replied'}};
+function _(k){return (T[L]||T.en)[k]||k;}
+
+// Offline data fallback for cloud deployment
+var OFFLINE_DATA = null;
+var OFFLINE_MODE = false;
+async function loadOfflineData(){
+  if (typeof EMBEDDED_DATA !== 'undefined') { OFFLINE_DATA = EMBEDDED_DATA; OFFLINE_MODE = true; return; }
+  try {
+    var r = await fetch('/static/data.json');
+    if (r.ok) { OFFLINE_DATA = await r.json(); OFFLINE_MODE = true; }
+  } catch(e) {}
+}
+async function apiFetch(url, opts){
+  if (OFFLINE_MODE) {
+    if (url === '/api/dashboard') return offlineDashboard();
+    if (url.startsWith('/api/customers?')) return offlineCustomers(url);
+    if (url.startsWith('/api/customers/')) return offlineCustomer(url);
+    if (url === '/api/tasks') return offlineTasks();
+    if (url === '/api/channels') return offlineChannels();
+    if (url === '/api/duplicates') return {email_dupes:[],company_dupes:[]};
+    if (url === '/api/blacklist') return [];
+    return {error:'offline'};
+  }
+  try {
+    var res = await fetch(url, opts);
+    if (!res.ok) throw new Error('API error');
+    return await res.json();
+  } catch(e) {
+    if (!OFFLINE_DATA) await loadOfflineData();
+    if (OFFLINE_DATA) { OFFLINE_MODE = true; return apiFetch(url, opts); }
+    return {error:'unavailable'};
+  }
+}
+function offlineDashboard(){
+  var c = OFFLINE_DATA.customers, s = c.filter(function(x){return x.email_sent_date;});
+  var r = c.filter(function(x){return x.reply_received==='Yes';});
+  var regs = {}, grades = {}, chs = {};
+  c.forEach(function(x){
+    var rg = x.region||'Unknown'; regs[rg] = (regs[rg]||0) + 1;
+    var gr = x.grade||'C'; grades[gr] = (grades[gr]||0) + 1;
+    var ch = x.channel||x.source||'web'; chs[ch] = (chs[ch]||0) + 1;
+  });
+  return {total:c.length, sent:s.length, replied:r.length, new:c.length-s.length, blacklisted:0,
+    regions: Object.keys(regs).map(function(k){return {name:k,count:regs[k]};}),
+    grades: Object.keys(grades).map(function(k){return {name:k,count:grades[k]};}),
+    channels: Object.keys(chs).map(function(k){return {name:k,count:chs[k]};})};
+}
+function offlineCustomers(url){
+  var params = new URLSearchParams(url.split('?')[1]||'');
+  var rows = OFFLINE_DATA.customers.filter(function(r){
+    if (params.get('grade') && r.grade !== params.get('grade')) return false;
+    if (params.get('region') && r.region !== params.get('region')) return false;
+    if (params.get('status') === 'sent' && !r.email_sent_date) return false;
+    if (params.get('status') === 'new' && r.email_sent_date) return false;
+    if (params.get('status') === 'replied' && r.reply_received !== 'Yes') return false;
+    var s = params.get('search');
+    if (s) { var q = s.toLowerCase(); if (!(r.company||'').toLowerCase().includes(q) && !(r.email||'').toLowerCase().includes(q)) return false; }
+    return true;
+  });
+  return rows;
+}
+function offlineCustomer(url){
+  var id = parseInt(url.split('/api/customers/')[1]);
+  var c = OFFLINE_DATA.customers.find(function(x){return x.id===id;})||{};
+  var e = OFFLINE_DATA.emails.filter(function(x){return x.customer_id===id;});
+  var t = OFFLINE_DATA.tasks.filter(function(x){return x.customer_id===id;});
+  return {customer:c, emails:e, tasks:t};
+}
+function offlineTasks(){ return OFFLINE_DATA.tasks; }
+function offlineChannels(){
+  var chs = {};
+  OFFLINE_DATA.customers.forEach(function(x){
+    var ch = x.channel||x.source||'web'; chs[ch] = (chs[ch]||0) + 1;
+  });
+  return Object.keys(chs).map(function(k){return {name:k,count:chs[k]};});
+}
+
+function setLang(l){L=l;localStorage.setItem('crm_lang',l);document.querySelectorAll('.lang-btn').forEach(function(b){b.classList.toggle('active',b.textContent.trim()===(l==='zh'?'中文':'EN'));});document.querySelectorAll('[data-l]').forEach(function(e){e.textContent=_(e.dataset.l);});if(P==='dashboard')loadDashboard();if(P==='customers')loadCustomers();if(P==='tasks')loadTasks();}
+
+function toast(m,t){
+  var e=document.getElementById('toast');e.textContent=m;e.className='toast toast-'+(t||'success')+' show';
+  setTimeout(function(){e.classList.remove('show');},2500);
+}
+function showMdl(id){document.getElementById(id).classList.add('show');}
+function hideMdl(id){document.getElementById(id).classList.remove('show');}
+
+// NAV
+document.querySelectorAll('.nav-item').forEach(function(el){
+  el.addEventListener('click',function(){
+    document.querySelectorAll('.nav-item').forEach(function(e){e.classList.remove('active');});
+    this.classList.add('active');
+    var p=this.dataset.panel;P=p;
+    document.querySelectorAll('.panel').forEach(function(pl){pl.classList.remove('active');});
+    document.getElementById('panel-'+p).classList.add('active');
+    document.getElementById('ptitle').textContent=_(this.querySelector('[data-l]')?this.querySelector('[data-l]').textContent.replace(/[0-9\-]+/g,'').trim():(this.textContent.replace(/[0-9\-]+/g,'').trim()));
+    if(p==='dashboard')loadDashboard();
+    if(p==='customers')loadCustomers();
+    if(p==='email'){loadEmailCustomers();loadTemplates();}
+    if(p==='tasks')loadTasks();
+    if(p==='channels')loadChannels();
+    if(p==='blacklist')loadBlacklist();
+  });
+});
+
+function today(){return new Date().toISOString().substr(0,10);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// DASHBOARD
+async function loadDashboard(){
+  var r=await apiFetch(A+'/dashboard').then(function(res){return res.json();});
+  document.getElementById('dstats').innerHTML='<div class="stat-cards"><div class="stat-card pink"><div class="num">'+r.total+'</div><div class="label">Total</div></div><div class="stat-card green"><div class="num">'+r.sent+'</div><div class="label">Sent</div></div><div class="stat-card"><div class="num">'+r.new+'</div><div class="label">New</div></div><div class="stat-card orange"><div class="num">'+r.replied+'</div><div class="label">Replied</div></div></div>';
+  document.getElementById('nav-cust-count').textContent=r.total;
+  document.getElementById('dregions').innerHTML=r.regions.map(function(rr){return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span>'+(({AU:'🇦🇺',NA:'🇺🇸🇨🇦',SEA:'🇸🇬🇲🇾',ME:'🇦🇪🇸🇦'})[rr.name]||'')+' '+rr.name+'</span><span>'+rr.count+'</span></div>';}).join('');
+  document.getElementById('dgrades').innerHTML=r.grades.map(function(g){return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span class="badge badge-'+g.name+'">'+_(g.name==='A'?'grade_a':g.name==='B'?'grade_b':g.name==='C'?'grade_c':'grade_d')+'</span><span>'+g.count+'</span></div>';}).join('');
+}
+
+// CUSTOMERS
+async function loadCustomers(){
+  var params=new URLSearchParams({search:document.getElementById('cfilter').value,grade:document.getElementById('cgrade').value,region:document.getElementById('cregion').value,status:document.getElementById('cstatus').value});
+  var rows=await apiFetch(A+'/customers?'+params).then(function(res){return res.json();});
+  document.getElementById('cthead').innerHTML='<tr><th><input type="checkbox" id="ctall" onclick="toggleAllCust(this)"></th><th>'+_('th_company')+'</th><th>'+_('th_email')+'</th><th>'+_('th_grade')+'</th><th>'+_('th_region')+'</th><th>'+_('th_status')+'</th><th>'+_('th_sent')+'</th><th>'+_('th_actions')+'</th></tr>';
+  document.getElementById('ctbody').innerHTML=rows.map(function(r){
+    var st=r.email_sent_date?'sent':(r.reply_received==='Yes'?'replied':'new');
+    var gl=String(r.grade||'C').toLowerCase();
+    return '<tr><td><input type="checkbox" value="'+r.id+'" class="cchk"></td><td><a class="clickable" onclick="viewCust('+r.id+')">'+r.company+'</a></td><td>'+esc(r.email)||'</td><td><span class="badge badge-'+(r.grade||'C')+'">'+_('grade_'+gl)+'</span></td><td>'+esc(r.region)+'</td><td><span class="badge badge-'+st+'">'+_('status_'+st)+'</span></td><td>'+(r.email_sent_date||'-')+'</td><td><button class="btn btn-outline btn-sm" onclick="viewCust('+r.id+')">View</button></td></tr>';
+  }).join('');
+}
+function toggleAllCust(chk){document.querySelectorAll('.cchk').forEach(function(c){c.checked=chk.checked;});}
+function checkedIds(){var ids=[];document.querySelectorAll('.cchk:checked').forEach(function(c){ids.push(parseInt(c.value));});return ids;}
+async function batchOp(action){
+  var ids=checkedIds();if(!ids.length)return toast('Select customers first','error');
+  var val=prompt('Enter value:')||'';if(!val)return;
+  await fetch(A+'/customers/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:ids,action:action,value:val})});
+  toast('Done');loadCustomers();
+}
+async function viewCust(id){
+  var data=await apiFetch(A+'/customers/'+id).then(function(res){return res.json();});
+  var c=data.customer;
+  var st=c.email_sent_date?'sent':(c.reply_received==='Yes'?'replied':'new');
+  var gl=String(c.grade||'C').toLowerCase();
+
+  document.getElementById('mdl-title').textContent=c.company;
+  document.getElementById('mdl-cust-body').innerHTML=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'+
+      '<div class="form-group"><label>Company</label><input value="'+esc(c.company)+'" onchange="updField('+id+',\x27company\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Email</label><input value="'+esc(c.email)+'" onchange="updField('+id+',\x27email\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Email Dept</label><input value="'+esc(c.email_department)+'" onchange="updField('+id+',\x27email_department\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Contact</label><input value="'+esc(c.contact_name)+'" onchange="updField('+id+',\x27contact_name\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Title</label><input value="'+esc(c.title)+'" onchange="updField('+id+',\x27title\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Phone</label><input value="'+esc(c.phone)+'" onchange="updField('+id+',\x27phone\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Address</label><input value="'+esc(c.address)+'" onchange="updField('+id+',\x27address\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Country</label><input value="'+esc(c.country)+'" onchange="updField('+id+',\x27country\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Region</label><input value="'+esc(c.region)+'" onchange="updField('+id+',\x27region\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Website</label><input value="'+esc(c.website)+'" onchange="updField('+id+',\x27website\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Grade</label><select onchange="updField('+id+',\x27grade\x27,this.value)"><option>A'+(c.grade==='A'?' selected':'')+'>A</option><option>B'+(c.grade==='B'?' selected':'')+'>B</option><option>C'+(c.grade==='C'?' selected':'')+'>C</option><option>D'+(c.grade==='D'?' selected':'')+'>D</option></select></div>'+
+      '<div class="form-group"><label>Status</label><input value="'+(c.email_sent_date?'Sent: '+c.email_sent_date:((c.reply_received==='Yes')?'Replied':'New'))+'" readonly style="background:#f8fafc">'+'</div>'+
+      '<div class="form-group"><label>Channel</label><input value="'+esc(c.channel||c.source||'')+'" onchange="updField('+id+',\x27channel\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Founded</label><input value="'+esc(c.founded)+'" onchange="updField('+id+',\x27founded\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Scale</label><input value="'+esc(c.scale)+'" onchange="updField('+id+',\x27scale\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Main Products</label><input value="'+esc(c.main_products)+'" onchange="updField('+id+',\x27main_products\x27,this.value)"></div>'+
+      '<div class="form-group"><label>Customer Base</label><input value="'+esc(c.customer_base)+'" onchange="updField('+id+',\x27customer_base\x27,this.value)"></div>'+
+    '</div>'+
+    '<div class="form-group"><label>Company Bio</label><textarea rows="2" onchange="updField('+id+',\x27company_bio\x27,this.value)">'+esc(c.company_bio)+'</textarea></div>'+
+    '<div class="form-group"><label>Product Fit for Signature Senses</label><textarea rows="2" onchange="updField('+id+',\x27product_fit\x27,this.value)">'+esc(c.product_fit)+'</textarea></div>'+
+    '<div class="form-group"><label>Notes</label><textarea rows="2" onchange="updField('+id+',\x27notes\x27,this.value)">'+esc(c.notes)+'</textarea></div>'+
+    '<h4 style="margin-top:16px;padding-bottom:8px;border-bottom:1px solid var(--border)">Engagement</h4>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin:8px 0;font-size:12px">'+
+      '<div><b>Sent:</b> '+(c.email_sent_date||'No')+'</div>'+
+      '<div><b>Follow-ups:</b> '+(c.follow_up_count||0)+'</div>'+
+      '<div><b>Replied:</b> '+(c.reply_received||'No')+'</div>'+
+      '<div><b>Template:</b> '+(c.template_used||'-')+'</div>'+
+    '</div>'+
+    (c.reply_summary?'<div style="font-size:12px;margin:4px 0"><b>Reply:</b> '+esc(c.reply_summary)+'</div>':'')+
+    '<h4 style="margin-top:16px;padding-bottom:8px;border-bottom:1px solid var(--border)" onchange="updField('+id+',\x27reply_received\x27,\x27Yes\x27)">Email History ('+data.emails.length+')</h4>'+
+    (data.emails.length?data.emails.map(function(e){return '<div style="font-size:11px;padding:4px 0;border-bottom:1px solid #f0f0f0">'+e.sent_at.substr(0,16)+' | <b>'+esc(e.subject)+'</b> | <span style="color:'+(e.status==='sent'?'green':'orange')+'">'+e.status+'</span></div>';}).join(''):'<div style="color:#999;font-size:11px">None</div>')+
+    '<h4 style="margin-top:16px;padding-bottom:8px;border-bottom:1px solid var(--border)">Tasks ('+data.tasks.length+')</h4>'+
+    (data.tasks.length?data.tasks.map(function(t){var ovrd=t.due_date<today()&&t.status==='pending';var td=t.due_date===today();return '<div class="task-item '+(ovrd?'overdue':(td?'today':''))+'"><span>'+t.title+'</span><span style="font-size:11px;color:var(--text-muted)">Due: '+t.due_date+' | '+t.status+'</span></div>';}).join(''):'<div style="color:#999;font-size:11px">None</div>');
+  showMdl('mdl-cust');
+}
+async function updField(id,f,v){await fetch(A+'/customers/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({[f]:v})});}
+
+// ADD CUSTOMER
+function showAdd(){
+  document.getElementById('acompany').value='';
+  document.getElementById('aemail').value='';
+  document.getElementById('acontact').value='';
+  document.getElementById('atitle').value='';
+  document.getElementById('aphone').value='';
+  document.getElementById('acountry').value='';
+  document.getElementById('aregion').value='';
+  document.getElementById('achannel').value='';
+  document.getElementById('awebsite').value='';
+  document.getElementById('agrade').value='C';
+  document.getElementById('anotes').value='';
+  document.getElementById('aestatus').textContent='';
+  showMdl('mdl-add');
+}
+async function validateEmail(){
+  var e=document.getElementById('aemail').value.trim();if(!e)return;
+  document.getElementById('aestatus').textContent='Checking...';
+  var r=await fetch(A+'/validate-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e})}).then(function(res){return res.json();});
+  document.getElementById('aestatus').textContent=r.valid?'Valid':'Invalid: '+r.detail;
+  document.getElementById('aestatus').style.color=r.valid?'green':'red';
+}
+async function saveCustomer(){
+  var data={
+    company:document.getElementById('acompany').value,
+    email:document.getElementById('aemail').value,
+    contact_name:document.getElementById('acontact').value,
+    title:document.getElementById('atitle').value,
+    phone:document.getElementById('aphone').value,
+    country:document.getElementById('acountry').value,
+    region:document.getElementById('aregion').value,
+    website:document.getElementById('awebsite').value,
+    channel:document.getElementById('achannel').value,
+    grade:document.getElementById('agrade').value,
+    notes:document.getElementById('anotes').value
+  };
+  if(!data.company)return toast('Company required','error');
+  var r=await fetch(A+'/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(function(res){return res.json();});
+  if(r.error)return toast(r.error,'error');
+  hideMdl('mdl-add');toast('Added');loadCustomers();loadDashboard();
+}
+
+// EMAIL
+var ecust=[];
+async function loadEmailCustomers(){
+  var rows=await fetch(A+'/customers').then(function(res){return res.json();});
+  ecust=rows;
+  document.getElementById('elist').innerHTML=rows.map(function(r){
+    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer;border-bottom:1px solid #f5f5f5"><input type="checkbox" class="echk" value="'+r.id+'" onchange="updateECount()"><span style="flex:1">'+r.company+'</span><span style="color:var(--text-muted);font-size:10px">'+esc(r.email)+'</span><span class="badge badge-'+(r.email_sent_date?'sent':'new')+'">'+(r.email_sent_date?'Sent':'New')+'</span></label>';
+  }).join('');
+}
+function emailToggleAll(){
+  var v=document.getElementById('eall').checked;
+  document.querySelectorAll('.echk').forEach(function(c){c.checked=v;});
+  updateECount();
+}
+function updateECount(){
+  var n=document.querySelectorAll('.echk:checked').length;
+  document.getElementById('ecnt').textContent=n+' selected';
+}
+function emailCheckedIds(){
+  var ids=[];
+  document.querySelectorAll('.echk:checked').forEach(function(c){ids.push(parseInt(c.value));});
+  return ids;
+}
+
+async function loadTemplates(){
+  var temps=await fetch(A+'/templates').then(function(res){return res.json();});
+  document.getElementById('etpl').innerHTML='<option value="">-- Select --</option>'+temps.map(function(t){return '<option value="'+t.name+'">'+t.name+'</option>';}).join('');
+}
+
+async function previewEmail(){
+  var tpl=document.getElementById('etpl').value;
+  if(!tpl){document.getElementById('epreview').textContent='Select a template.';return;}
+  var ids=emailCheckedIds();
+  var cid=ids.length?ids[0]:0;
+  if(!cid){
+    var r=await fetch(A+'/templates/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_id:ecust[0]?ecust[0].id:1,template:tpl})}).then(function(res){return res.json();});
+    document.getElementById('epreview').innerHTML='<b>'+r.subject+'</b>\n\n'+r.body;
+    return;
+  }
+  var r=await fetch(A+'/templates/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_id:cid,template:tpl})}).then(function(res){return res.json();});
+  document.getElementById('epreview').innerHTML='<b>'+r.subject+'</b>\n\n'+r.body;
+}
+
+async function sendBatch(mode){
+  var ids=emailCheckedIds();if(!ids.length)return toast('Select customers','error');
+  var tpl=document.getElementById('etpl').value;if(!tpl)return toast('Select template','error');
+  var skip=mode==='direct';var sent=0;
+  for(var i=0;i<ids.length;i++){
+    var cid=ids[i];
+    var r=await fetch(A+'/templates/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_id:cid,template:tpl})}).then(function(res){return res.json();});
+    var cust=ecust.find(function(c){return c.id==cid;});
+    await fetch(A+'/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_id:cid,to:cust?cust.email:'',subject:r.subject,body:r.body,skip_approval:skip})});
+    sent++;
+  }
+  toast('Sent '+sent+' emails');loadCustomers();loadDashboard();
+}
+
+// TASKS
+async function loadTasks(){
+  var rows=await apiFetch(A+'/tasks').then(function(res){return res.json();});
+  document.getElementById('nav-task-count').textContent=rows.filter(function(t){return t.status==='pending';}).length;
+  document.getElementById('tlist').innerHTML=rows.length?rows.map(function(t){
+    var ovrd=t.due_date<today()&&t.status==='pending';
+    var td=t.due_date===today();
+    return '<div class="task-item '+(ovrd?'overdue':(td?'today':''))+'"><span><b>'+(t.company||'')+'</b> - '+t.title+'</span><span style="font-size:11px;color:var(--text-muted)">Due: '+t.due_date+' | <select onchange="updTask('+t.id+',this.value)"><option value="pending"'+(t.status==='pending'?' selected':'')+'>Pending</option><option value="done"'+(t.status==='done'?' selected':'')+'>Done</option></select></span></div>';
+  }).join(''):'<div style="text-align:center;color:#999;padding:40px">No tasks</div>';
+}
+async function updTask(id,s){await fetch(A+'/tasks/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s})});loadTasks();}
+async function genTasks(){
+  var r=await fetch(A+'/generate-tasks',{method:'POST'}).then(function(res){return res.json();});
+  toast('Created '+r.created+' tasks');loadTasks();
+}
+
+// CHANNELS
+async function loadChannels(){
+  var rows=await apiFetch(A+'/channels').then(function(res){return res.json();});
+  var total=rows.reduce(function(s,r){return s+r.count;},0);
+  var colors=['#1e40af','#2563eb','#16a34a','#ea580c','#7c3aed','#0891b2'];
+  document.getElementById('chstats').innerHTML='<div style="display:flex;gap:4px;height:24px;border-radius:4px;overflow:hidden;margin-bottom:12px">'+rows.map(function(r,i){return '<div style="height:100%;width:'+(r.count/total*100).toFixed(1)+'%;background:'+colors[i%6]+'" title="'+r.name+': '+r.count+'"></div>';}).join('')+'</div>'+rows.map(function(r,i){return '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px"><span><span style="display:inline-block;width:10px;height:10px;background:'+colors[i%6]+';border-radius:2px;margin-right:6px"></span>'+(r.name||'Unknown')+'</span><span>'+r.count+' ('+(r.count/total*100).toFixed(0)+'%)</span></div>';}).join('');
+}
+
+// DUPLICATES
+async function checkDupes(){
+  var r=await apiFetch(A+'/duplicates').then(function(res){return res.json();});
+  document.getElementById('dupres').innerHTML='<h4 style="font-size:13px">Email Dupes ('+r.email_dupes.length+')</h4>'+r.email_dupes.map(function(d){return '<div style="font-size:12px;padding:4px 0">'+d.email+' -> IDs: '+d.ids+'</div>';}).join('')+'<h4 style="font-size:13px;margin-top:12px">Company Dupes ('+r.company_dupes.length+')</h4>'+r.company_dupes.map(function(d){return '<div style="font-size:12px;padding:4px 0">'+d.company+' -> IDs: '+d.ids+'</div>';}).join('');
+}
+
+// BLACKLIST
+async function loadBlacklist(){
+  var rows=await apiFetch(A+'/blacklist').then(function(res){return res.json();});
+  document.getElementById('blbody').innerHTML=rows.length?rows.map(function(r){return '<tr><td>'+r.company+'</td><td>'+esc(r.email)+'</td><td>'+(r.blacklist_reason||'')+'</td><td><button class="btn btn-outline btn-sm" onclick="unblacklist('+r.id+')">Restore</button></td></tr>';}).join(''):'<tr><td colspan="4" style="text-align:center;color:#999;padding:20px">Empty</td></tr>';
+}
+async function unblacklist(id){
+  await fetch(A+'/customers/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[id],action:'unblacklist'})});
+  toast('Restored');loadBlacklist();
+}
+
+// SEARCH
+async function doSearch(){
+  var kw=document.getElementById('skw').value.trim();
+  var mkt=document.getElementById('smkt').value;
+  var typ=document.getElementById('stype').value;
+  var btn=document.getElementById('btn-search');
+  btn.disabled=true;btn.textContent='Searching...';
+
+  var regions=mkt?[mkt]:['AU','NA','SEA','ME'];
+  var smart={'AU':['food distributor importer Australia gourmet spices salt pepper wholesale email','specialty food distributor supermarket Australia imported seasoning email'],'NA':['specialty food importer distributor USA Canada gourmet salt pepper wholesale email','spice seasoning distributor supermarket buyer United States Canada email'],'SEA':['food importer distributor Singapore Malaysia Thailand spices seasoning salt pepper email','gourmet food wholesaler Southeast Asia imported seasoning supermarket email'],'ME':['food importer distributor UAE Dubai Saudi Arabia spices salt pepper email','gourmet food supplier Middle East seasoning email']};
+
+  var qs=[];
+  var countryNames={'US':'USA','CA':'Canada','SG':'Singapore','MY':'Malaysia','TH':'Thailand','ID':'Indonesia','AE':'UAE Dubai','SA':'Saudi Arabia','QA':'Qatar','KW':'Kuwait'};
+  var loc=countryNames[mkt]||'';
+  regions.forEach(function(r){
+    if(kw){
+      var l=loc||(r==='NA'?'USA Canada':r==='SEA'?'Singapore Malaysia':r==='ME'?'UAE Dubai':'Australia');
+      var k=kw;if(typ)k=kw+' '+typ.replace(/\+/g,' ');
+      qs.push({keywords:k+' '+l+' email contact',region:r});
+    }else{
+      (smart[r]||['food distributor '+r+' salt pepper email']).forEach(function(q){
+        var qq=loc?q.replace(/Australia|USA Canada|Singapore Malaysia|UAE Dubai/gi,loc):q;
+        if(typ)qq=qq+' '+typ.replace(/\+/g,' ');
+        qs.push({keywords:qq,region:r});
+      });
+    }
+  });
+
+  document.getElementById('sstatus').innerHTML='<b>Searching '+qs.length+' queries...</b>';
+  var all=[];
+  for(var i=0;i<qs.length;i++){
+    var q=qs[i];
+    document.getElementById('sstatus').innerHTML='<b>Searching '+qs.length+' queries...</b> '+(i+1)+'/'+qs.length;
+    var sr=await fetch(A+'/ai-search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(q)}).then(function(res){return res.json();});
+    if(sr.error)continue;
+    var done=false;
+    for(var a=0;a<30&&!done;a++){
+      await new Promise(function(r){setTimeout(r,2000);});
+      var st=await fetch(A+'/ai-search/status').then(function(res){return res.json();});
+      var req=st.find(function(s){return s.search_id===sr.search_id;});
+      if(req&&(req.status==='completed'||req.status==='error')){done=true;
+        if(req.leads)req.leads.forEach(function(l){if(!all.find(function(x){return x.email&&x.email===l.email;}))all.push(l);});
+      }
+    }
+  }
+
+  btn.disabled=false;btn.textContent='Find Customers';
+  document.getElementById('sstatus').innerHTML='<b>Done!</b> Found '+all.length+' leads.';
+  if(!all.length)return;
+  document.getElementById('sresults').style.display='block';
+  var valid=all.filter(function(l){return l.email_validated==='Yes';});
+  document.getElementById('sresults').innerHTML='<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-weight:600">'+all.length+' leads ('+valid.length+' valid) '+(valid.length?'<button class="btn btn-primary btn-sm" onclick="addAllToCRM('+JSON.stringify(valid.filter(function(l){return !l.added_to_crm;}).map(function(l){return l.id;}))+')">Add All Valid</button>':'')+'</div>'+all.map(function(l){return '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:13px"><div><b>'+esc(l.company)+'</b> <span style="font-size:10px;color:var(--text-muted)">['+l.region+']</span> <span style="margin-left:8px;color:var(--text-muted)">'+(l.email||'No email')+'</span> <span style="margin-left:8px;font-size:10px;background:#f1f5f9;padding:1px 6px;border-radius:3px">'+esc(l.source||'web')+'</span></div><div><span style="font-size:10px;color:'+(l.email_validated==='Yes'?'green':(l.email_validated==='No'?'red':'#999'))+'">'+(l.email_validated==='Yes'?'OK':(l.email_validated==='No'?'BAD':'?'))+'</span> '+(l.added_to_crm?'<span class="badge badge-sent">In CRM</span>':(l.email_validated==='Yes'?'<button class="btn btn-primary btn-sm" onclick="addLead('+l.id+')">+ CRM</button>':''))+'</div></div>';}).join('');
+}
+async function addLead(id){
+  await fetch(A+'/ai-search/add-to-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lead_ids:[id]})});
+  toast('Added');loadCustomers();loadDashboard();
+}
+async function addAllToCRM(ids){
+  if(!ids||!ids.length)return;
+  await fetch(A+'/ai-search/add-to-crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lead_ids:ids})});
+  toast('Added '+ids.length);
+}
+
+// INIT
+document.getElementById('htime').textContent=new Date().toLocaleString();
+loadDashboard();loadTasks();
+</script>
+</body>
+</html>
