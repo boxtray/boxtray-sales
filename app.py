@@ -39,8 +39,14 @@ def get_db():
             g.db = psycopg2.connect(DATABASE_URL, sslmode='require')
             g.db.cursor_factory = psycopg2.extras.RealDictCursor
         else:
-            DB_PATH = BASE / 'data' / 'crm.db'
-            os.makedirs(BASE / 'data', exist_ok=True)
+            if IS_RENDER:
+                import tempfile, shutil
+                DB_PATH = Path(tempfile.gettempdir()) / 'crm.db'
+                if not DB_PATH.exists():
+                    shutil.copy(BASE / 'crm.db', DB_PATH)
+            else:
+                DB_PATH = BASE / 'data' / 'crm.db'
+                os.makedirs(BASE / 'data', exist_ok=True)
             g.db = sqlite3.connect(str(DB_PATH))
             g.db.row_factory = sqlite3.Row
             g.db.execute("PRAGMA journal_mode=WAL")
