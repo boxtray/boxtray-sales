@@ -13,6 +13,7 @@ SALES_DIR = BASE.parent if BASE.name == 'web_app' else Path(os.getcwd())
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 USE_PG = bool(DATABASE_URL)
+IS_RENDER = bool(os.environ.get('RENDER', '')) or bool(os.environ.get('PORT', ''))
 
 if USE_PG:
     import psycopg2
@@ -445,4 +446,4 @@ if __name__ == '__main__':
                     due = (dt+timedelta(days=d)).strftime('%Y-%m-%d')
                     q("INSERT INTO tasks (customer_id,title,due_date,type) VALUES (?,?,?,?)",(row['id'],ttl,due,'follow_up'))
     port = int(os.environ.get('PORT',5000))
-    app.run(host='0.0.0.0' if USE_PG else '127.0.0.1', port=port, debug=not USE_PG)
+    app.run(host='0.0.0.0' if IS_RENDER else '127.0.0.1', port=port, debug=not IS_RENDER)
