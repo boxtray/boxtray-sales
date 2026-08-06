@@ -548,7 +548,8 @@ def _web_search(query, max_results=8, timeout=15):
         email = ','.join(emails[:2]) if emails else ''
         results.append({'href':href,'title':title,'body':snippet,'domain':domain,'email':email})
 
-    sys.stderr.write(f'[Serper] {sum(1 for x in results if x[\"email\"])} with email / {len(results)} total\n')
+    with_email = sum(1 for x in results if x.get('email'))
+    sys.stderr.write(f'[Serper] {with_email} with email / {len(results)} total\n')
     return results
 
 def auto_search(sid, keywords, region):
