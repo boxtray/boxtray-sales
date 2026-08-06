@@ -464,8 +464,8 @@ def import_data():
         if company and q1("SELECT id FROM customers WHERE company=?", (company,)): continue
         fields = ['company','email','contact_name','title','phone','address','country','region','website','source','channel','grade','notes','company_bio','main_products','product_fit','email_department','customer_base','scale','founded','status','email_sent_date','email_validated','reply_received','reply_summary']
         vals = [c.get(f, '') for f in fields]
-        ph = ','.join('?' * len(fields))
-        qi(f"INSERT INTO customers ({','.join(fields)}) VALUES ({ph}){RETURNING}", vals)
+        ph = ','.join(['?'] * len(fields))
+        q(f"INSERT INTO customers ({','.join(fields)}) VALUES ({ph})", vals)
         count += 1
     return jsonify({'ok': True, 'imported': count})
 
