@@ -16,7 +16,7 @@ IS_RENDER = bool(os.environ.get('RENDER', '')) or bool(os.environ.get('PORT', ''
 
 # On Render, use Supabase pooler (IPv4, works)
 if IS_RENDER:
-    DATABASE_URL = 'postgresql://postgres.boxtray:001745Xiaoming@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres'
+    DATABASE_URL = 'postgresql://postgres.eptlcvlsdvpuqdltzbfr:001745Xiaoming@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres'
 
 USE_PG = bool(DATABASE_URL) if not IS_RENDER else True
 
