@@ -588,7 +588,8 @@ def auto_search(sid, keywords, region):
             company = title.split(' - ')[0].split(' | ')[0][:80]
             all_leads.append({'company':company,'email':email_str,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'Google','notes':body[:200]})
 
-        sys.stderr.write(f'[Search #{sid}] {len(all_leads)} leads, {sum(1 for l in all_leads if l[\"email\"])} with email\n')
+        has_email = sum(1 for l in all_leads if l.get('email'))
+        sys.stderr.write(f'[Search #{sid}] {len(all_leads)} leads, {has_email} with email\n')
 
         for lead in all_leads:
             lead.setdefault('contact_name',''); lead.setdefault('title',''); lead.setdefault('address','')
