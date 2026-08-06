@@ -500,63 +500,66 @@ def extract_phone(text):
     m = re.findall(r'[\+]?\d[\d\s\-\(\)]{7,}', text)
     return m[0].strip() if m else ''
 
+def _ddg_search(query, max_results=5, timeout=15):
+    """Run DDGS search with timeout."""
+    import sys
+    from ddgs import DDGS
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(lambda: list(DDGS().text(query, max_results=max_results)))
+        try:
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            sys.stderr.write(f'[DDGS] Timeout for: {query[:60]}\n')
+            return []
+        except Exception as e:
+            sys.stderr.write(f'[DDGS] Error: {e}\n')
+            return []
+
 def auto_search(sid, keywords, region):
     """Multi-engine: DuckDuckGo + LinkedIn + Business Directories."""
     import sys, traceback
     try:
-        from ddgs import DDGS
         all_leads, seen, loc = [], set(), region or ''
 
         # Strategy 1: DuckDuckGo general
-        try:
-            for r in DDGS().text(f'{keywords} email contact', max_results=5):
-                body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
-                domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-                if not domain or domain in seen: continue
-                seen.add(domain)
-                email = extract_email(body) or extract_email(title)
-                company = title.split(' - ')[0].split(' | ')[0][:80]
-                all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'DuckDuckGo','notes':body[:200]})
-        except Exception as e:
-            sys.stderr.write(f'[DDG] {e}\n')
+        for r in _ddg_search(f'{keywords} email contact', 5):
+            body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
+            domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
+            if not domain or domain in seen: continue
+            seen.add(domain)
+            email = extract_email(body) or extract_email(title)
+            company = title.split(' - ')[0].split(' | ')[0][:80]
+            all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'DuckDuckGo','notes':body[:200]})
 
         # Strategy 2: LinkedIn
-        try:
-            for r in DDGS().text(f'site:linkedin.com/company {keywords}', max_results=3):
-                body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
-                company_name = title.replace('| LinkedIn','').replace('LinkedIn','').split(' - ')[0].strip()[:80] or title[:80]
-                all_leads.append({'company':company_name,'email':'','phone':'','country':loc,'region':loc,'website':href,'source':'LinkedIn','notes':body[:200]})
-        except Exception as e:
-            sys.stderr.write(f'[LinkedIn] {e}\n')
+        for r in _ddg_search(f'site:linkedin.com/company {keywords}', 3):
+            body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
+            company_name = title.replace('| LinkedIn','').replace('LinkedIn','').split(' - ')[0].strip()[:80] or title[:80]
+            all_leads.append({'company':company_name,'email':'','phone':'','country':loc,'region':loc,'website':href,'source':'LinkedIn','notes':body[:200]})
 
         # Strategy 3: Business directories
-        try:
-            for r in DDGS().text(f'{keywords} yellowpages OR thomasnet OR kompass OR tradekey', max_results=3):
-                body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
-                domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-                if not domain or domain in seen: continue
-                seen.add(domain)
-                email = extract_email(body) or extract_email(title)
-                company = title.split(' - ')[0].split(' | ')[0][:80]
-                src = 'YellowPages' if 'yellowpages' in domain else ('ThomasNet' if 'thomasnet' in domain else ('Kompass' if 'kompass' in domain else 'Business Directory'))
-                all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':src,'notes':body[:200]})
-        except Exception as e:
-            sys.stderr.write(f'[Directory] {e}\n')
+        for r in _ddg_search(f'{keywords} yellowpages OR thomasnet OR kompass OR tradekey', 3):
+            body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
+            domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
+            if not domain or domain in seen: continue
+            seen.add(domain)
+            email = extract_email(body) or extract_email(title)
+            company = title.split(' - ')[0].split(' | ')[0][:80]
+            src = 'YellowPages' if 'yellowpages' in domain else ('ThomasNet' if 'thomasnet' in domain else ('Kompass' if 'kompass' in domain else 'Business Directory'))
+            all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':src,'notes':body[:200]})
 
         # Strategy 4: Import/export
-        try:
-            for r in DDGS().text(f'{keywords} import export distributor wholesale', max_results=3):
-                body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
-                domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-                if not domain or domain in seen: continue
-                seen.add(domain)
-                email = extract_email(body) or extract_email(title)
-                company = title.split(' - ')[0].split(' | ')[0][:80]
-                all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'Google Directory','notes':body[:200]})
-        except Exception as e:
-            sys.stderr.write(f'[Import] {e}\n')
+        for r in _ddg_search(f'{keywords} import export distributor wholesale', 3):
+            body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
+            domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
+            if not domain or domain in seen: continue
+            seen.add(domain)
+            email = extract_email(body) or extract_email(title)
+            company = title.split(' - ')[0].split(' | ')[0][:80]
+            all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'Google Directory','notes':body[:200]})
 
-        sys.stderr.write(f'[Search #{sid}] Got {len(all_leads)} leads total\n')
+        sys.stderr.write(f'[Search #{sid}] Got {len(all_leads)} leads from {len([l for l in all_leads if l.get(\"email\") and \"@\" in (l.get(\"email\") or \"\")])} emails\n')
 
         # Store + validate
         for lead in all_leads:
