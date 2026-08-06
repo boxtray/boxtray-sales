@@ -325,7 +325,8 @@ def generate_tasks():
 
 @app.route('/api/templates')
 def list_templates():
-    tmpls = []; td = SALES_DIR / '03-email-templates'
+    tmpls = []
+    td = (BASE / 'email-templates') if (BASE / 'email-templates').exists() else (SALES_DIR / '03-email-templates')
     for folder in ['01-cold-outreach','02-follow-up','03-reply-handling']:
         fp = td / folder
         if fp.exists():
@@ -342,7 +343,7 @@ def render_template():
     row = q1("SELECT * FROM customers WHERE id=?",(cid,))
     if not row: return jsonify({'error':'Not found'}), 404
     name = (row['contact_name'] or '').split()[0] if row['contact_name'] else 'there'
-    td = SALES_DIR / '03-email-templates'
+    td = (BASE / 'email-templates') if (BASE / 'email-templates').exists() else (SALES_DIR / '03-email-templates')
     parts = tp.split('/')
     fp = td / parts[0] / (parts[1]+'.md') if len(parts)==2 else td / tp
     if not fp.exists(): return jsonify({'error':'Template not found'}), 404
