@@ -507,19 +507,26 @@ def _web_search(query, max_results=8, timeout=15):
         url = 'https://lite.duckduckgo.com/lite/'
         data = urllib.parse.urlencode({'q': query}).encode()
         req = urllib.request.Request(url, data=data, method='POST')
-        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+        req.add_header('User-Agent', 'Mozilla/5.0 (compatible; BoxtrayCRM/1.0)')
         ctx = ssl.create_default_context()
         html = urllib.request.urlopen(req, timeout=timeout, context=ctx).read().decode('utf-8','replace')
+        sys.stderr.write(f'[Web] HTML len={len(html)}\n')
     except Exception as e:
         sys.stderr.write(f'[Web] HTTP error: {e}\n')
         return []
 
     results = []
-    # Match: <a rel="nofollow" href="URL" class='result-link'>TITLE</a>
-    # Followed by: <td class='result-snippet'>SNIPPET</td>
-    # Followed by: <span class='link-text'>DOMAIN</span>
-    links = re.findall(r"<a[^>]*href=[\"'](https?://[^\"']+)[\"'][^>]*class=['\"]result-link['\"][^>]*>(.*?)</a>", html, re.DOTALL)
-    snippets = re.findall(r"<td[^>]*class=['\"]result-snippet['\"][^>]*>(.*?)</td>", html, re.DOTALL)
+    # DDG Lite results: <a class="result-link" href="URL">Title</a> then <td class="result-snippet">Snippet</td>
+    link_pat = '<a[^>]*class=.result-link.[^>]*href=.([^" \t>]+)'  # href="URL"
+    title_pat = '>(.*?)</a>'
+    links = re.findall(link_pat + title_pat, html, re.DOTALL|re.IGNORECASE)
+
+    # Also try without result-link class (older format)
+    if not links:
+        links = re.findall('<a[^>]*href=.([^" \t>]+).[^>]*class=.result-link.[^>]*>(.*?)</a>', html, re.DOTALL|re.IGNORECASE)
+
+    snippets = re.findall("<td[^>]*class=.result-snippet.[^>]*>(.*?)</td>", html, re.DOTALL|re.IGNORECASE)
+    sys.stderr.write(f'[Web] Parsed: {len(links)} links, {len(snippets)} snippets\n')
 
     for i in range(min(len(links), len(snippets), max_results)):
         href = links[i][0]
@@ -527,7 +534,6 @@ def _web_search(query, max_results=8, timeout=15):
         body = re.sub(r'<[^>]+>', '', snippets[i]).strip()
         if 'duckduckgo.com' in href: continue
         results.append({'href': href, 'title': title, 'body': body})
-
     sys.stderr.write(f'[Web] Got {len(results)} results\n')
     return results
 
