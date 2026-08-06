@@ -501,32 +501,23 @@ def extract_phone(text):
     return m[0].strip() if m else ''
 
 def _web_search(query, max_results=8, timeout=15):
-    """Search DuckDuckGo Lite and parse results."""
-    import sys, urllib.request, urllib.parse, ssl
+    """Search DuckDuckGo Lite via requests library."""
+    import sys, requests, re
     try:
-        url = 'https://lite.duckduckgo.com/lite/'
-        data = urllib.parse.urlencode({'q': query}).encode()
-        req = urllib.request.Request(url, data=data, method='POST')
-        req.add_header('User-Agent', 'Mozilla/5.0 (compatible; BoxtrayCRM/1.0)')
-        ctx = ssl.create_default_context()
-        html = urllib.request.urlopen(req, timeout=timeout, context=ctx).read().decode('utf-8','replace')
-        sys.stderr.write(f'[Web] HTML len={len(html)}\n')
+        resp = requests.post('https://lite.duckduckgo.com/lite/',
+            data={'q': query},
+            headers={'User-Agent': 'Mozilla/5.0 (compatible; BoxtrayCRM/1.0)'},
+            timeout=timeout)
+        html = resp.text
+        sys.stderr.write(f'[Web] HTML len={len(html)} status={resp.status_code}\n')
     except Exception as e:
-        sys.stderr.write(f'[Web] HTTP error: {e}\n')
+        sys.stderr.write(f'[Web] FAIL: {e}\n')
         return []
 
     results = []
-    # DDG Lite results: <a class="result-link" href="URL">Title</a> then <td class="result-snippet">Snippet</td>
-    link_pat = '<a[^>]*class=.result-link.[^>]*href=.([^" \t>]+)'  # href="URL"
-    title_pat = '>(.*?)</a>'
-    links = re.findall(link_pat + title_pat, html, re.DOTALL|re.IGNORECASE)
-
-    # Also try without result-link class (older format)
-    if not links:
-        links = re.findall('<a[^>]*href=.([^" \t>]+).[^>]*class=.result-link.[^>]*>(.*?)</a>', html, re.DOTALL|re.IGNORECASE)
-
+    links = re.findall('<a[^>]*class=.result-link.[^>]*href=.([^" \t>]+)[^>]*>(.*?)</a>', html, re.DOTALL|re.IGNORECASE)
     snippets = re.findall("<td[^>]*class=.result-snippet.[^>]*>(.*?)</td>", html, re.DOTALL|re.IGNORECASE)
-    sys.stderr.write(f'[Web] Parsed: {len(links)} links, {len(snippets)} snippets\n')
+    sys.stderr.write(f'[Web] Parse: {len(links)} links, {len(snippets)} snippets\n')
 
     for i in range(min(len(links), len(snippets), max_results)):
         href = links[i][0]
@@ -534,7 +525,7 @@ def _web_search(query, max_results=8, timeout=15):
         body = re.sub(r'<[^>]+>', '', snippets[i]).strip()
         if 'duckduckgo.com' in href: continue
         results.append({'href': href, 'title': title, 'body': body})
-    sys.stderr.write(f'[Web] Got {len(results)} results\n')
+    sys.stderr.write(f'[Web] Results: {len(results)}\n')
     return results
 
 def auto_search(sid, keywords, region):
