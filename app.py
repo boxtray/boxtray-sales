@@ -501,31 +501,46 @@ def extract_phone(text):
     return m[0].strip() if m else ''
 
 def _web_search(query, max_results=8, timeout=15):
-    """Search DuckDuckGo Lite via requests library."""
+    """DuckDuckGo Instant Answer JSON API - no HTML parsing."""
     import sys, requests, re
     try:
-        resp = requests.post('https://lite.duckduckgo.com/lite/',
-            data={'q': query},
-            headers={'User-Agent': 'Mozilla/5.0 (compatible; BoxtrayCRM/1.0)'},
+        resp = requests.get('https://api.duckduckgo.com/',
+            params={'q': query, 'format': 'json', 'no_html': 1, 'skip_disambig': 1},
+            headers={'User-Agent': 'BoxtrayCRM/1.0'},
             timeout=timeout)
-        html = resp.text
-        sys.stderr.write(f'[Web] HTML len={len(html)} status={resp.status_code}\n')
+        data = resp.json()
+        sys.stderr.write(f'[DDG] API ok, topics={len(data.get(\"RelatedTopics\",[]))}\n')
     except Exception as e:
-        sys.stderr.write(f'[Web] FAIL: {e}\n')
+        sys.stderr.write(f'[DDG] FAIL: {e}\n')
         return []
 
     results = []
-    links = re.findall('<a[^>]*class=.result-link.[^>]*href=.([^" \t>]+)[^>]*>(.*?)</a>', html, re.DOTALL|re.IGNORECASE)
-    snippets = re.findall("<td[^>]*class=.result-snippet.[^>]*>(.*?)</td>", html, re.DOTALL|re.IGNORECASE)
-    sys.stderr.write(f'[Web] Parse: {len(links)} links, {len(snippets)} snippets\n')
+    for t in data.get('RelatedTopics', []):
+        if 'Text' in t and 'FirstURL' in t:
+            href = t['FirstURL']
+            text = t['Text']
+            title = text.split(' - ')[0] if ' - ' in text else text[:80]
+            body = text.split(' - ')[1] if ' - ' in text else ''
+            domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
+            results.append({'href': href, 'title': title, 'body': body})
+        if len(results) >= max_results: break
 
-    for i in range(min(len(links), len(snippets), max_results)):
-        href = links[i][0]
-        title = re.sub(r'<[^>]+>', '', links[i][1]).strip()
-        body = re.sub(r'<[^>]+>', '', snippets[i]).strip()
-        if 'duckduckgo.com' in href: continue
-        results.append({'href': href, 'title': title, 'body': body})
-    sys.stderr.write(f'[Web] Results: {len(results)}\n')
+    # Also try duckduckgo_html if API returns no topics
+    if not results:
+        try:
+            resp2 = requests.post('https://html.duckduckgo.com/html/',
+                data={'q': query},
+                headers={'User-Agent': 'Mozilla/5.0 BoxtrayCRM/1.0'},
+                timeout=timeout)
+            links = re.findall('<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', resp2.text, re.DOTALL)
+            for href, title in links[:max_results]:
+                domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
+                results.append({'href': href, 'title': re.sub(r'<[^>]+>','',title).strip(), 'body': ''})
+            sys.stderr.write(f'[DDG] HTML fallback: {len(results)} results\n')
+        except Exception as e2:
+            sys.stderr.write(f'[DDG] HTML fallback FAIL: {e2}\n')
+
+    sys.stderr.write(f'[DDG] Total: {len(results)}\n')
     return results
 
 def auto_search(sid, keywords, region):
