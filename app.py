@@ -608,7 +608,7 @@ def auto_search(sid, keywords, region):
     except Exception as e:
         sys.stderr.write(f'[Search #{sid}] FAILED: {traceback.format_exc()}\n')
         try:
-        err_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            err_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             tq(f"UPDATE search_requests SET status='error', processed_at='{err_now}' WHERE id=?",(sid,))
         except: pass
     finally:
