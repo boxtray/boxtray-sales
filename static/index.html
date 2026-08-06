@@ -158,6 +158,7 @@ textarea { resize:vertical; min-height:80px; }
         <div class="table-wrap">
           <div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Step 1: Select Template</div>
           <div style="padding:10px 16px"><select id="etpl" style="width:100%;padding:8px" onchange="previewEmail()"><option value="">-- Select --</option></select></div>
+          <div style="padding:8px 16px;max-height:180px;overflow-y:auto" id="tpl-list"></div>
           <div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Step 2: Select Customers</div>
           <div style="padding:10px 16px;max-height:260px;overflow-y:auto" id="elist"></div>
           <div style="padding:8px 16px;border-top:1px solid var(--border)"><label style="font-size:11px;cursor:pointer"><input type="checkbox" id="eall" onchange="emailToggleAll()"> Select All</label> <span id="ecnt" style="font-size:11px;color:var(--text-muted)">0 selected</span></div>
@@ -186,6 +187,7 @@ textarea { resize:vertical; min-height:80px; }
 <div class="modal-overlay" id="mdl-cust"><div class="modal"><div class="modal-header"><h3 id="mdl-title">Customer</h3><span class="modal-close" onclick="hideMdl('mdl-cust')">x</span></div><div class="modal-body" id="mdl-cust-body"></div></div></div>
 <div class="modal-overlay" id="mdl-add"><div class="modal"><div class="modal-header"><h3>Add Customer</h3><span class="modal-close" onclick="hideMdl('mdl-add')">x</span></div><div class="modal-body"><div class="form-row"><div class="form-group"><label>Company *</label><input id="acompany"></div><div class="form-group"><label>Email</label><input id="aemail"><button type="button" class="btn btn-outline btn-sm" style="margin-top:4px" onclick="validateEmail()">Validate</button><span id="aestatus" style="font-size:11px;margin-left:8px"></span></div></div><div class="form-row"><div class="form-group"><label>Contact</label><input id="acontact"></div><div class="form-group"><label>Title</label><input id="atitle"></div></div><div class="form-row"><div class="form-group"><label>Phone</label><input id="aphone"></div><div class="form-group"><label>Country</label><input id="acountry"></div></div><div class="form-row"><div class="form-group"><label>Region</label><select id="aregion"><option value="">--</option><option>AU</option><option>NA</option><option>SEA</option><option>ME</option></select></div><div class="form-group"><label>Grade</label><select id="agrade"><option>C</option><option>A</option><option>B</option><option>D</option></select></div></div><div class="form-row"><div class="form-group"><label>Channel</label><input id="achannel"></div><div class="form-group"><label>Website</label><input id="awebsite"></div></div><div class="form-group"><label>Notes</label><textarea id="anotes" rows="2"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="hideMdl('mdl-add')">Cancel</button><button class="btn btn-primary" onclick="saveCustomer()">Save</button></div></div></div>
 
+<div class="modal-overlay" id="mdl-tpl"><div class="modal"><div class="modal-header"><h3>Edit Template: <span id="tpl-edit-name"></span></h3><span class="modal-close" onclick="hideMdl('mdl-tpl')">x</span></div><div class="modal-body"><div class="form-group"><label>Subject</label><input id="tpl-edit-subject"></div><div class="form-group"><label>Body (use [First Name] for customer name)</label><textarea id="tpl-edit-body" rows="14"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="hideMdl('mdl-tpl')">Cancel</button><button class="btn btn-primary" onclick="saveTemplate()">Save</button></div></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -444,7 +446,8 @@ function emailCheckedIds(){
 
 async function loadTemplates(){
   var temps=await fetch(A+'/templates').then(function(res){return res.json();});
-  document.getElementById('etpl').innerHTML='<option value="">-- Select --</option>'+temps.map(function(t){return '<option value="'+t.name+'">'+t.name+'</option>';}).join('');
+  document.getElementById('etpl').innerHTML='<option value="">-- Select --</option>'+temps.map(function(t){return '<option value="'+t.name+'">'+t.name+' - '+t.subject.substr(0,40)+'</option>';}).join('');
+  document.getElementById('tpl-list').innerHTML=temps.map(function(t,i){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:12px"><div><b>'+t.name+'</b><br><span style="color:var(--text-muted)">'+t.subject.substr(0,60)+'</span></div><button class="btn btn-outline btn-sm" onclick="editTemplate(\''+t.name+'\',\''+escape(t.subject)+'\',\''+escape(t.body)+'\')">Edit</button></div>';}).join('');
 }
 
 async function previewEmail(){
@@ -473,6 +476,28 @@ async function sendBatch(mode){
     sent++;
   }
   toast('Sent '+sent+' emails');loadCustomers();loadDashboard();
+}
+
+// TEMPLATE EDITOR
+var editTmplName = '';
+function editTemplate(name, subject, body){
+  editTmplName = name;
+  document.getElementById('tpl-edit-name').textContent = name;
+  document.getElementById('tpl-edit-subject').value = unescape(subject);
+  document.getElementById('tpl-edit-body').value = unescape(body);
+  showMdl('mdl-tpl');
+}
+async function saveTemplate(){
+  var name = editTmplName;
+  var subj = document.getElementById('tpl-edit-subject').value;
+  var body = document.getElementById('tpl-edit-body').value;
+  await fetch(A+'/templates/'+encodeURIComponent(name), {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({subject:subj, body:body})
+  });
+  hideMdl('mdl-tpl');
+  loadTemplates();
+  toast('Template saved');
 }
 
 // TASKS

@@ -123,6 +123,7 @@ def init_db():
     ex("CREATE TABLE IF NOT EXISTS tasks (id SERIAL PRIMARY KEY,customer_id INTEGER,title TEXT NOT NULL,due_date TEXT,type TEXT DEFAULT 'follow_up',status TEXT DEFAULT 'pending',notes TEXT DEFAULT '',created_at TIMESTAMP DEFAULT NOW())")
     ex("CREATE TABLE IF NOT EXISTS search_requests (id SERIAL PRIMARY KEY,keywords TEXT NOT NULL,region TEXT DEFAULT '',status TEXT DEFAULT 'pending',created_at TIMESTAMP DEFAULT NOW(),processed_at TIMESTAMP)")
     ex("CREATE TABLE IF NOT EXISTS search_leads (id SERIAL PRIMARY KEY,search_id INTEGER,company TEXT NOT NULL,email TEXT DEFAULT '',contact_name TEXT DEFAULT '',title TEXT DEFAULT '',phone TEXT DEFAULT '',address TEXT DEFAULT '',country TEXT DEFAULT '',region TEXT DEFAULT '',website TEXT DEFAULT '',source TEXT DEFAULT '',notes TEXT DEFAULT '',email_validated TEXT DEFAULT 'No',validation_detail TEXT DEFAULT '',added_to_crm BOOLEAN DEFAULT FALSE)")
+    ex("CREATE TABLE IF NOT EXISTS templates (id SERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,subject TEXT DEFAULT '',body TEXT DEFAULT '',folder TEXT DEFAULT 'general',created_at TIMESTAMP DEFAULT NOW(),updated_at TIMESTAMP DEFAULT NOW())")
     if USE_PG: db.commit()
 
 def migrate_csv():
@@ -323,9 +324,9 @@ def generate_tasks():
                     count += 1
     return jsonify({'ok':True,'created':count})
 
-@app.route('/api/templates')
-def list_templates():
-    tmpls = []
+def seed_templates():
+    """Import templates from MD files into DB if empty."""
+    if q1("SELECT COUNT(*) as cnt FROM templates")['cnt'] > 0: return
     td = (BASE / 'email-templates') if (BASE / 'email-templates').exists() else (SALES_DIR / '03-email-templates')
     for folder in ['01-cold-outreach','02-follow-up','03-reply-handling']:
         fp = td / folder
@@ -334,8 +335,26 @@ def list_templates():
                 c = f.read_text(encoding='utf-8'); subj = ''
                 for line in c.split('\n'):
                     if line.startswith('Subject:'): subj = line[8:].strip(); break
-                tmpls.append({'name':f'{folder}/{f.stem}','subject':subj,'body':c})
-    return jsonify(tmpls)
+                name = f'{folder}/{f.stem}'
+                q("INSERT INTO templates (name,subject,body,folder) VALUES (?,?,?,?)",(name,subj,c,folder))
+
+@app.route('/api/templates')
+def list_templates():
+    seed_templates()  # seed on-demand if empty
+    return jsonify([dict(r) for r in qr("SELECT * FROM templates ORDER BY folder, name")])
+
+@app.route('/api/templates/<path:name>', methods=['PUT'])
+def save_template(name):
+    from urllib.parse import unquote
+    name = unquote(name)
+    data = request.json
+    seed_templates()  # ensure seeded
+    existing = q1("SELECT id FROM templates WHERE name=?",(name,))
+    if existing:
+        q(f"UPDATE templates SET subject=?, body=?, updated_at={NOW_SQL} WHERE name=?",(data.get('subject',''),data.get('body',''),name))
+    else:
+        q("INSERT INTO templates (name,subject,body,folder) VALUES (?,?,?,?)",(name,data.get('subject',''),data.get('body',''),data.get('folder','general')))
+    return jsonify({'ok':True})
 
 @app.route('/api/templates/render', methods=['POST'])
 def render_template():
@@ -343,17 +362,15 @@ def render_template():
     row = q1("SELECT * FROM customers WHERE id=?",(cid,))
     if not row: return jsonify({'error':'Not found'}), 404
     name = (row['contact_name'] or '').split()[0] if row['contact_name'] else 'there'
-    td = (BASE / 'email-templates') if (BASE / 'email-templates').exists() else (SALES_DIR / '03-email-templates')
-    parts = tp.split('/')
-    fp = td / parts[0] / (parts[1]+'.md') if len(parts)==2 else td / tp
-    if not fp.exists(): return jsonify({'error':'Template not found'}), 404
-    content = fp.read_text(encoding='utf-8').replace('[First Name]',name)
+    tpl = q1("SELECT * FROM templates WHERE name=?",(tp,))
+    if not tpl: return jsonify({'error':'Template not found'}), 404
+    content = tpl['body'].replace('[First Name]',name)
     subj = ''; blines = []; found = False
     for line in content.split('\n'):
         if line.startswith('Subject:'): subj = line[8:].strip(); found = True
         elif found: blines.append(line)
     if not found: blines = content.split('\n')
-    return jsonify({'subject':subj,'body':'\n'.join(blines).strip()})
+    return jsonify({'subject':subj,'body':'\n'.join(blines).strip(),'raw_body':tpl['body']})
 
 @app.route('/api/channels', methods=['GET'])
 def list_channels():
@@ -514,6 +531,7 @@ def import_data():
 if __name__ == '__main__':
     with app.app_context():
         init_db()
+        seed_templates()
         migrate_csv()
         if not q1("SELECT COUNT(*) as cnt FROM tasks") or q1("SELECT COUNT(*) as cnt FROM tasks")['cnt'] == 0:
             rows = qr("SELECT * FROM customers WHERE email_sent_date != '' AND is_blacklisted=0")
