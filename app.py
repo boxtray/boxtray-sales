@@ -5,8 +5,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, session, redirect, url_for
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 
 BASE = Path(__file__).parent
 SALES_DIR = BASE.parent if BASE.name == 'web_app' else Path(os.getcwd())
@@ -27,6 +29,7 @@ else:
     import sqlite3
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
+app.secret_key = os.environ.get('SECRET_KEY', 'boxtray-sales-secret-key-2026')
 CORS(app)
 
 # ------- Config -------
@@ -124,7 +127,12 @@ def init_db():
     ex("CREATE TABLE IF NOT EXISTS search_requests (id SERIAL PRIMARY KEY,keywords TEXT NOT NULL,region TEXT DEFAULT '',status TEXT DEFAULT 'pending',created_at TIMESTAMP DEFAULT NOW(),processed_at TIMESTAMP)")
     ex("CREATE TABLE IF NOT EXISTS search_leads (id SERIAL PRIMARY KEY,search_id INTEGER,company TEXT NOT NULL,email TEXT DEFAULT '',contact_name TEXT DEFAULT '',title TEXT DEFAULT '',phone TEXT DEFAULT '',address TEXT DEFAULT '',country TEXT DEFAULT '',region TEXT DEFAULT '',website TEXT DEFAULT '',source TEXT DEFAULT '',notes TEXT DEFAULT '',email_validated TEXT DEFAULT 'No',validation_detail TEXT DEFAULT '',added_to_crm BOOLEAN DEFAULT FALSE)")
     ex("CREATE TABLE IF NOT EXISTS templates (id SERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,subject TEXT DEFAULT '',body TEXT DEFAULT '',folder TEXT DEFAULT 'general',created_at TIMESTAMP DEFAULT NOW(),updated_at TIMESTAMP DEFAULT NOW())")
+    ex("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY,username TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,role TEXT DEFAULT 'user',created_at TIMESTAMP DEFAULT NOW())")
     if USE_PG: db.commit()
+
+    # Seed default admin
+    if not q1("SELECT id FROM users WHERE username='admin'"):
+        q("INSERT INTO users (username,password_hash,role) VALUES (?,?,?)",('admin',generate_password_hash('admin123'),'admin'))
 
 def migrate_csv():
     existing = q1("SELECT COUNT(*) as cnt FROM customers")
@@ -168,8 +176,62 @@ def send_smtp(to, subject, body):
         s.send_message(msg)
     return True
 
+# ------- Auth -------
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            if request.path.startswith('/api/'):
+                return jsonify({'error':'Unauthorized'}), 401
+            return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            if request.path.startswith('/api/'):
+                return jsonify({'error':'Unauthorized'}), 401
+            return redirect('/login')
+        if session.get('role') != 'admin':
+            return jsonify({'error':'Forbidden'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/login')
+def login_page():
+    if 'user_id' in session:
+        return redirect('/')
+    return app.send_static_file('login.html')
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.json
+    username = (data.get('username') or '').strip()
+    password = data.get('password', '')
+    user = q1("SELECT * FROM users WHERE username=?",(username,))
+    if not user or not check_password_hash(user['password_hash'], password):
+        return jsonify({'error':'Invalid credentials'}), 401
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    session['role'] = user['role']
+    return jsonify({'ok':True,'username':user['username'],'role':user['role']})
+
+@app.route('/api/logout', methods=['POST'])
+def api_logout():
+    session.clear()
+    return jsonify({'ok':True})
+
+@app.route('/api/auth')
+def api_auth():
+    if 'user_id' not in session:
+        return jsonify({'logged_in':False})
+    return jsonify({'logged_in':True,'username':session.get('username'),'role':session.get('role')})
+
 # ------- Routes -------
 @app.route('/')
+@login_required
 def index():
     return app.send_static_file('index.html')
 
@@ -184,6 +246,8 @@ def dashboard():
         'channels':[{'name':x['ch'],'count':x['cnt']} for x in qr("SELECT COALESCE(NULLIF(channel,''), source) as ch, COUNT(*) as cnt FROM customers WHERE is_blacklisted=0 GROUP BY ch")],
         'grades':[{'name':x['grade'],'count':x['cnt']} for x in qr("SELECT grade, COUNT(*) as cnt FROM customers WHERE is_blacklisted=0 GROUP BY grade")]})
 
+
+@login_required
 @app.route('/api/customers')
 def list_customers():
     grade = request.args.get('grade',''); region = request.args.get('region','')
@@ -201,6 +265,8 @@ def list_customers():
     parts.append("ORDER BY created_at DESC")
     return jsonify([dict(r) for r in qr(' '.join(parts), params)])
 
+
+@login_required
 @app.route('/api/customers/<int:id>')
 def get_customer(id):
     row = q1("SELECT * FROM customers WHERE id=?", (id,))
@@ -208,6 +274,8 @@ def get_customer(id):
     return jsonify({'customer':dict(row), 'emails':[dict(e) for e in qr("SELECT * FROM emails WHERE customer_id=? ORDER BY sent_at DESC",(id,))],
         'tasks':[dict(t) for t in qr("SELECT * FROM tasks WHERE customer_id=? ORDER BY due_date ASC",(id,))]})
 
+
+@login_required
 @app.route('/api/customers/<int:id>', methods=['PUT'])
 def update_customer(id):
     data = request.json
@@ -220,6 +288,8 @@ def update_customer(id):
     q(f"UPDATE customers SET {', '.join(sets)} WHERE id=?", vals)
     return jsonify({'ok':True})
 
+
+@login_required
 @app.route('/api/customers', methods=['POST'])
 def add_customer():
     data = request.json
@@ -233,11 +303,15 @@ def add_customer():
     new_id = qi(f"INSERT INTO customers ({','.join(fields)}) VALUES ({ph}){RETURNING}", vals)
     return jsonify({'ok':True,'id':new_id})
 
+
+@login_required
 @app.route('/api/customers/<int:id>', methods=['DELETE'])
 def delete_customer(id):
     q("UPDATE customers SET is_blacklisted=1, blacklist_reason='deleted' WHERE id=?",(id,))
     return jsonify({'ok':True})
 
+
+@login_required
 @app.route('/api/customers/batch', methods=['POST'])
 def batch_action():
     data = request.json; ids = data.get('ids',[]); action = data.get('action',''); value = data.get('value','')
@@ -258,12 +332,16 @@ def batch_action():
             tags.discard(value); q("UPDATE customers SET tags=? WHERE id=?",(','.join(filter(None,tags)),i))
     return jsonify({'ok':True})
 
+
+@login_required
 @app.route('/api/validate-email', methods=['POST'])
 def validate_email():
     email = request.json.get('email','').strip()
     if not email: return jsonify({'valid':False,'detail':'empty'})
     v,d = smtp_probe(email); return jsonify({'valid':v,'detail':d})
 
+
+@login_required
 @app.route('/api/send-email', methods=['POST'])
 def send_email_api():
     data = request.json; cid = data.get('customer_id'); to = data.get('to','')
@@ -279,6 +357,8 @@ def send_email_api():
     q("INSERT INTO emails (customer_id,to_email,subject,body,type,status) VALUES (?,?,?,?,?,'sent')", (cid,to,subj,body,stype))
     return jsonify({'ok':True,'message':f'Sent to {to}'})
 
+
+@login_required
 @app.route('/api/send-approvals', methods=['POST'])
 def send_approvals():
     ids = request.json.get('ids',[]); sent=0
@@ -293,22 +373,30 @@ def send_approvals():
         sent += 1
     return jsonify({'ok':True,'sent':sent})
 
+
+@login_required
 @app.route('/api/tasks', methods=['GET'])
 def list_tasks():
     return jsonify([dict(r) for r in qr("SELECT t.*, c.company FROM tasks t LEFT JOIN customers c ON t.customer_id=c.id ORDER BY t.due_date ASC")])
 
+
+@login_required
 @app.route('/api/tasks', methods=['POST'])
 def add_task():
     d = request.json
     q("INSERT INTO tasks (customer_id,title,due_date,type,notes) VALUES (?,?,?,?,?)", (d.get('customer_id'),d['title'],d.get('due_date'),d.get('type','follow_up'),d.get('notes','')))
     return jsonify({'ok':True})
 
+
+@login_required
 @app.route('/api/tasks/<int:id>', methods=['PUT'])
 def update_task(id):
     d = request.json
     q("UPDATE tasks SET status=?, notes=? WHERE id=?", (d.get('status','pending'),d.get('notes',''),id))
     return jsonify({'ok':True})
 
+
+@login_required
 @app.route('/api/generate-tasks', methods=['POST'])
 def generate_tasks():
     rows = qr("SELECT * FROM customers WHERE email_sent_date != '' AND is_blacklisted=0")
@@ -338,11 +426,15 @@ def seed_templates():
                 name = f'{folder}/{f.stem}'
                 q("INSERT INTO templates (name,subject,body,folder) VALUES (?,?,?,?)",(name,subj,c,folder))
 
+
+@login_required
 @app.route('/api/templates')
 def list_templates():
     seed_templates()  # seed on-demand if empty
     return jsonify([dict(r) for r in qr("SELECT * FROM templates ORDER BY folder, name")])
 
+
+@login_required
 @app.route('/api/templates/<path:name>', methods=['PUT'])
 def save_template(name):
     from urllib.parse import unquote
@@ -356,6 +448,8 @@ def save_template(name):
         q("INSERT INTO templates (name,subject,body,folder) VALUES (?,?,?,?)",(name,data.get('subject',''),data.get('body',''),data.get('folder','general')))
     return jsonify({'ok':True})
 
+
+@login_required
 @app.route('/api/templates/render', methods=['POST'])
 def render_template():
     d = request.json; cid = d.get('customer_id'); tp = d.get('template','')
@@ -372,10 +466,14 @@ def render_template():
     if not found: blines = content.split('\n')
     return jsonify({'subject':subj,'body':'\n'.join(blines).strip(),'raw_body':tpl['body']})
 
+
+@login_required
 @app.route('/api/channels', methods=['GET'])
 def list_channels():
     return jsonify([dict(r) for r in qr("SELECT COALESCE(NULLIF(channel,''), source) as name, COUNT(*) as count FROM customers WHERE is_blacklisted=0 GROUP BY name")])
 
+
+@login_required
 @app.route('/api/duplicates', methods=['GET'])
 def check_duplicates():
     if USE_PG:
@@ -386,6 +484,8 @@ def check_duplicates():
         cd = qr("SELECT company, COUNT(*) as cnt, GROUP_CONCAT(id) as ids FROM customers WHERE is_blacklisted=0 GROUP BY company HAVING cnt>1")
     return jsonify({'email_dupes':[{'email':r['email'],'ids':r['ids']} for r in ed],'company_dupes':[{'company':r['company'],'ids':r['ids']} for r in cd]})
 
+
+@login_required
 @app.route('/api/blacklist')
 def list_blacklist():
     return jsonify([dict(r) for r in qr("SELECT * FROM customers WHERE is_blacklisted=1 ORDER BY updated_at DESC")])
@@ -466,6 +566,8 @@ def auto_search(sid, keywords, region):
     except: q(f"UPDATE search_requests SET status='error', processed_at={NOW_SQL} WHERE id=?",(sid,))
 
 
+
+@login_required
 @app.route('/api/ai-search', methods=['POST'])
 def ai_search():
     d = request.json; kw = d.get('keywords','').strip(); reg = d.get('region','').strip()
@@ -474,6 +576,8 @@ def ai_search():
     threading.Thread(target=auto_search, args=(sid,kw,reg), daemon=True).start()
     return jsonify({'ok':True,'search_id':sid,'status':'searching'})
 
+
+@login_required
 @app.route('/api/ai-search/status')
 def ai_search_status():
     rows = qr("SELECT * FROM search_requests WHERE created_at >= datetime('now','-24 hours') ORDER BY created_at DESC LIMIT 20")
@@ -483,6 +587,8 @@ def ai_search_status():
         result.append({'search_id':r['id'],'keywords':r['keywords'],'region':r['region'],'status':r['status'],'created_at':r['created_at'],'leads':[dict(l) for l in leads]})
     return jsonify(result)
 
+
+@login_required
 @app.route('/api/ai-search/results', methods=['POST'])
 def ai_search_post_results():
     d = request.json; sid = d.get('search_id'); leads = d.get('leads',[])
@@ -496,6 +602,8 @@ def ai_search_post_results():
     q(f"UPDATE search_requests SET status='completed', processed_at={NOW_SQL} WHERE id=?",(sid,))
     return jsonify({'ok':True,'leads_stored':len(leads)})
 
+
+@login_required
 @app.route('/api/ai-search/add-to-crm', methods=['POST'])
 def ai_search_add_to_crm():
     ids = request.json.get('lead_ids',[]); added = 0
@@ -509,6 +617,8 @@ def ai_search_add_to_crm():
         q("UPDATE search_leads SET added_to_crm=1 WHERE id=?",(lid,)); added += 1
     return jsonify({'ok':True,'added':added})
 
+
+@login_required
 @app.route('/api/import', methods=['POST'])
 def import_data():
     """Bulk import customers from JSON."""
@@ -527,6 +637,43 @@ def import_data():
         count += 1
     return jsonify({'ok': True, 'imported': count})
 
+# ------- Admin -------
+@app.route('/api/admin/users')
+@admin_required
+def admin_users():
+    return jsonify([dict(r) for r in qr("SELECT id,username,role,created_at FROM users ORDER BY created_at")])
+
+@app.route('/api/admin/users', methods=['POST'])
+@admin_required
+def admin_add_user():
+    d = request.json
+    username = (d.get('username') or '').strip()
+    password = d.get('password', '')
+    role = d.get('role', 'user')
+    if not username or not password:
+        return jsonify({'error':'Username and password required'}), 400
+    if q1("SELECT id FROM users WHERE username=?",(username,)):
+        return jsonify({'error':'Username exists'}), 409
+    q("INSERT INTO users (username,password_hash,role) VALUES (?,?,?)",(username,generate_password_hash(password),role))
+    return jsonify({'ok':True})
+
+@app.route('/api/admin/users/<int:id>', methods=['PUT'])
+@admin_required
+def admin_update_user(id):
+    d = request.json
+    if d.get('password'):
+        q("UPDATE users SET password_hash=?, role=? WHERE id=?",(generate_password_hash(d['password']),d.get('role','user'),id))
+    else:
+        q("UPDATE users SET role=? WHERE id=?",(d.get('role','user'),id))
+    return jsonify({'ok':True})
+
+@app.route('/api/admin/users/<int:id>', methods=['DELETE'])
+@admin_required
+def admin_delete_user(id):
+    if id == session['user_id']: return jsonify({'error':'Cannot delete yourself'}), 400
+    q("DELETE FROM users WHERE id=?",(id,))
+    return jsonify({'ok':True})
+
 # ------- Main -------
 if __name__ == '__main__':
     with app.app_context():
@@ -541,4 +688,4 @@ if __name__ == '__main__':
                     due = (dt+timedelta(days=d)).strftime('%Y-%m-%d')
                     q("INSERT INTO tasks (customer_id,title,due_date,type) VALUES (?,?,?,?)",(row['id'],ttl,due,'follow_up'))
     port = int(os.environ.get('PORT',5000))
-    app.run(host='0.0.0.0' if IS_RENDER else '127.0.0.1', port=port, debug=not IS_RENDER)
+    app.run(host='0.0.0.0' if IS_RENDER else '127.0.0.1', port=port, debug=False)

@@ -119,12 +119,13 @@ textarea { resize:vertical; min-height:80px; }
     <div class="nav-item" data-panel="tasks"><span>📋</span> <span data-l="nav_tasks">Tasks</span> <span class="nav-badge" id="nav-task-count">-</span></div>
     <div class="nav-item" data-panel="channels"><span>📈</span> <span data-l="nav_channels">Channels</span></div>
     <div class="nav-item" data-panel="dupes"><span>🔄</span> <span data-l="nav_dupes">Duplicates</span></div>
-    <div class="nav-item" data-panel="blacklist"><span>🚫</span> <span data-l="nav_blacklist">Blacklist</span></div>
+    <div class="nav-item" data-panel="blacklist"><span>🚫</span> <span>Blacklist</span></div>
+    <div class="nav-item admin-only" data-panel="admin"><span>⚙️</span> <span>Admin</span></div>
   </div>
 </div>
 
 <div class="main">
-  <div class="header"><h2 id="ptitle">Dashboard</h2><div id="htime" style="font-size:12px;color:var(--text-muted)"></div></div>
+  <div class="header"><h2 id="ptitle">Dashboard</h2><div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:12px"><span id="huser"></span><a href="#" onclick="logout()" style="color:var(--text-muted)">Logout</a></div></div>
   <div class="content">
     <div class="panel active" id="panel-dashboard"><div id="dstats"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px"><div class="table-wrap"><div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">By Region</div><div style="padding:16px" id="dregions"></div></div><div class="table-wrap"><div style="padding:14px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">By Grade</div><div style="padding:16px" id="dgrades"></div></div></div></div>
 
@@ -181,6 +182,7 @@ textarea { resize:vertical; min-height:80px; }
     <div class="panel" id="panel-dupes"><button class="btn btn-outline" onclick="checkDupes()" style="margin-bottom:12px">Scan</button><div id="dupres"></div></div>
 
     <div class="panel" id="panel-blacklist"><div class="table-wrap"><table><thead><tr><th>Company</th><th>Email</th><th>Reason</th><th>Action</th></tr></thead><tbody id="blbody"></tbody></table></div></div>
+    <div class="panel" id="panel-admin"><h3 style="margin-bottom:12px">User Management</h3><button class="btn btn-primary btn-sm" onclick="showAddUser()" style="margin-bottom:12px">+ Add User</button><div class="table-wrap"><table><thead><tr><th>Username</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead><tbody id="ubody"></tbody></table></div></div>
   </div>
 </div>
 
@@ -297,6 +299,7 @@ document.querySelectorAll('.nav-item').forEach(function(el){
     if(p==='tasks')loadTasks();
     if(p==='channels')loadChannels();
     if(p==='blacklist')loadBlacklist();
+    if(p==='admin')loadAdmin();
   });
 });
 
@@ -603,9 +606,49 @@ async function addAllToCRM(ids){
   toast('Added '+ids.length);
 }
 
-// INIT
-document.getElementById('htime').textContent=new Date().toLocaleString();
-loadDashboard();loadTasks();
+// AUTH
+async function checkAuth(){
+  var r=await fetch('/api/auth').then(function(res){return res.json();});
+  if(!r.logged_in){window.location.href='/login';return;}
+  document.getElementById('huser').textContent=r.username+' ('+r.role+')';
+  if(r.role!=='admin'){
+    document.querySelectorAll('.admin-only').forEach(function(el){el.style.display='none';});
+  }
+}
+async function logout(){
+  await fetch('/api/logout',{method:'POST'});
+  window.location.href='/login';
+}
+
+// ADMIN
+async function loadAdmin(){
+  var users=await fetch('/api/admin/users').then(function(res){return res.json();});
+  document.getElementById('ubody').innerHTML=users.map(function(u){return '<tr><td>'+u.username+'</td><td>'+u.role+'</td><td>'+(u.created_at||'').substr(0,10)+'</td><td><button class="btn btn-outline btn-sm" onclick="editUser('+u.id+',\''+u.username+'\',\''+u.role+'\')">Edit</button> <button class="btn btn-danger btn-sm" onclick="delUser('+u.id+')">X</button></td></tr>';}).join('');
+}
+async function showAddUser(){
+  var u=prompt('Username:');if(!u)return;
+  var p=prompt('Password:');if(!p)return;
+  var r=prompt('Role (admin/user):','user');
+  await fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,role:r||'user'})});
+  loadAdmin();toast('User added');
+}
+async function editUser(id,uname,role){
+  var p=prompt('New password (leave blank to keep):');
+  var r=prompt('Role (admin/user):',role);
+  var data={role:r||'user'};if(p)data.password=p;
+  await fetch('/api/admin/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  loadAdmin();toast('Updated');
+}
+async function delUser(id){
+  if(!confirm('Delete this user?'))return;
+  await fetch('/api/admin/users/'+id,{method:'DELETE'});
+  loadAdmin();toast('Deleted');
+}
+
+// Init
+checkAuth().then(function(){
+  loadDashboard();loadTasks();
+});
 </script>
 </body>
 </html>
