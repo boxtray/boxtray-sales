@@ -649,6 +649,22 @@ def import_data():
         count += 1
     return jsonify({'ok': True, 'imported': count})
 
+# ------- Debug -------
+@app.route('/api/debug/net')
+def debug_net():
+    import urllib.request, ssl
+    r = {}
+    ctx = ssl.create_default_context()
+    for name, url in [('google','https://www.google.com/'),('ddg','https://lite.duckduckgo.com/lite/'),('supabase','https://supabase.com/')]:
+        try:
+            req = urllib.request.Request(url)
+            req.add_header('User-Agent','Mozilla/5.0')
+            resp = urllib.request.urlopen(req, timeout=10, context=ctx)
+            r[name] = f'OK {resp.status}'
+        except Exception as e:
+            r[name] = str(e)[:120]
+    return jsonify(r)
+
 # ------- Admin -------
 @app.route('/api/admin/users')
 @admin_required
