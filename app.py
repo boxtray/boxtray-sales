@@ -501,17 +501,35 @@ def extract_phone(text):
     return m[0].strip() if m else ''
 
 def _web_search(query, max_results=8, timeout=15):
-    """Search via googlesearch-python."""
-    import sys
+    """Search DuckDuckGo Lite and parse results."""
+    import sys, urllib.request, urllib.parse, ssl
     try:
-        from googlesearch import search
-        results = []
-        for url in search(query, num_results=max_results, lang='en'):
-            results.append({'href': url, 'title': '', 'body': ''})
-        return results
+        url = 'https://lite.duckduckgo.com/lite/'
+        data = urllib.parse.urlencode({'q': query}).encode()
+        req = urllib.request.Request(url, data=data, method='POST')
+        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+        ctx = ssl.create_default_context()
+        html = urllib.request.urlopen(req, timeout=timeout, context=ctx).read().decode('utf-8','replace')
     except Exception as e:
-        sys.stderr.write(f'[Google] Search failed: {e}\n')
+        sys.stderr.write(f'[Web] HTTP error: {e}\n')
         return []
+
+    results = []
+    # Match: <a rel="nofollow" href="URL" class='result-link'>TITLE</a>
+    # Followed by: <td class='result-snippet'>SNIPPET</td>
+    # Followed by: <span class='link-text'>DOMAIN</span>
+    links = re.findall(r"<a[^>]*href=[\"'](https?://[^\"']+)[\"'][^>]*class=['\"]result-link['\"][^>]*>(.*?)</a>", html, re.DOTALL)
+    snippets = re.findall(r"<td[^>]*class=['\"]result-snippet['\"][^>]*>(.*?)</td>", html, re.DOTALL)
+
+    for i in range(min(len(links), len(snippets), max_results)):
+        href = links[i][0]
+        title = re.sub(r'<[^>]+>', '', links[i][1]).strip()
+        body = re.sub(r'<[^>]+>', '', snippets[i]).strip()
+        if 'duckduckgo.com' in href: continue
+        results.append({'href': href, 'title': title, 'body': body})
+
+    sys.stderr.write(f'[Web] Got {len(results)} results\n')
+    return results
 
 def auto_search(sid, keywords, region):
     """Search web and store results."""
