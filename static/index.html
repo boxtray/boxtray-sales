@@ -220,11 +220,11 @@ async function apiFetch(url, opts){
   try {
     var res = await fetch(url, opts);
     if (!res.ok) throw new Error('API error');
-    return await res.json();
+    return res;
   } catch(e) {
     if (!OFFLINE_DATA) await loadOfflineData();
-    if (OFFLINE_DATA) { OFFLINE_MODE = true; return apiFetch(url, opts); }
-    return {error:'unavailable'};
+    if (OFFLINE_DATA) { OFFLINE_MODE = true; var d = await apiFetch(url, opts); return {json:function(){return Promise.resolve(d);},ok:true}; }
+    return {json:function(){return Promise.resolve({error:'unavailable'});},ok:false};
   }
 }
 function offlineDashboard(){
