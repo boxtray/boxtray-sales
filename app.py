@@ -65,6 +65,13 @@ def close_db(exc):
 def pg_adapt(sql, params):
     if USE_PG:
         sql = sql.replace('?', '%s')
+        # PostgreSQL bool compat: convert integer bools
+        sql = sql.replace('is_blacklisted=0','is_blacklisted=FALSE')
+        sql = sql.replace('is_blacklisted=1','is_blacklisted=TRUE')
+        sql = sql.replace('added_to_crm=0','added_to_crm=FALSE')
+        sql = sql.replace('added_to_crm=1','added_to_crm=TRUE')
+        sql = sql.replace('is_blacklisted != 0','is_blacklisted!=TRUE')
+        sql = sql.replace('is_blacklisted  != 1','is_blacklisted!=FALSE')
         cursor = get_db().cursor()
         cursor.execute(sql, params)
         get_db().commit()
