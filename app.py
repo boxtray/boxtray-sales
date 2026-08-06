@@ -500,33 +500,18 @@ def extract_phone(text):
     m = re.findall(r'[\+]?\d[\d\s\-\(\)]{7,}', text)
     return m[0].strip() if m else ''
 
-def _web_search(query, max_results=5, timeout=15):
-    """Search DuckDuckGo Lite HTML (no library dependency)."""
-    import sys, urllib.request, urllib.parse, ssl
+def _web_search(query, max_results=8, timeout=15):
+    """Search via googlesearch-python."""
+    import sys
     try:
-        url = 'https://lite.duckduckgo.com/lite/'
-        data = urllib.parse.urlencode({'q': query}).encode()
-        req = urllib.request.Request(url, data=data, method='POST')
-        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-        ctx = ssl.create_default_context()
-        resp = urllib.request.urlopen(req, timeout=timeout, context=ctx)
-        html = resp.read().decode('utf-8', errors='replace')
+        from googlesearch import search
+        results = []
+        for url in search(query, num_results=max_results, lang='en'):
+            results.append({'href': url, 'title': '', 'body': ''})
+        return results
     except Exception as e:
-        sys.stderr.write(f'[DDG] HTTP failed: {e}\n')
+        sys.stderr.write(f'[Google] Search failed: {e}\n')
         return []
-
-    # Parse results: <a href="URL">Title</a> ... <td class="result-snippet">snippet</td>
-    results = []
-    links = re.findall(r"<a[^>]+href=[\"'](https?://[^\"']+)[\"'][^>]*>(.*?)</a>", html, re.DOTALL)
-    snippets = re.findall(r"class=[\"']result-snippet[\"']>(.*?)</td>", html, re.DOTALL)
-
-    for i in range(min(len(links), len(snippets), max_results)):
-        href = links[i][0]
-        title = re.sub(r'<[^>]+>', '', links[i][1]).strip()
-        snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()
-        if 'duckduckgo.com' in href: continue
-        results.append({'title': title, 'body': snippet, 'href': href})
-    return results
 
 def auto_search(sid, keywords, region):
     """Search web and store results."""
@@ -558,13 +543,15 @@ def auto_search(sid, keywords, region):
 
         all_leads, seen, loc = [], set(), region or ''
         for r in _web_search(f'{keywords} email contact', 8):
-            href, body, title = r['href'], r['body'], r['title']
+            href = r.get('href','')
+            body = r.get('body','')
+            title = r.get('title','') or href.split('/')[-2].replace('-',' ').title() if '/' in href else ''
             domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
             if not domain or domain in seen: continue
             seen.add(domain)
             email = extract_email(body) or extract_email(title)
             company = title.split(' - ')[0].split(' | ')[0][:80]
-            all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'DuckDuckGo','notes':body[:200]})
+            all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'Google','notes':body[:200]})
 
         sys.stderr.write(f'[Search #{sid}] {len(all_leads)} leads\n')
         for lead in all_leads:
