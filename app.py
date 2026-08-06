@@ -501,12 +501,28 @@ def extract_phone(text):
     m = re.findall(r'[\+]?\d[\d\s\-\(\)]{7,}', text)
     return m[0].strip() if m else ''
 
-def _web_search(query, max_results=8, timeout=15):
-    """Google Search via Serper API."""
-    import sys, requests, re
+def check_mx(domain):
+    """DNS MX lookup — works on Render, no port 25 needed."""
     try:
-        resp = requests.post('https://google.serper.dev/search',
-            json={'q': query, 'num': 10},
+        dns.resolver.resolve(domain, 'MX')
+        return True, 'mx_ok'
+    except Exception as e:
+        return False, f'no_mx:{str(e)[:40]}'
+
+def fetch_page_email(url, timeout=8):
+    """Visit a page to extract emails from HTML body."""
+    import requests as req
+    try:
+        r = req.get(url, timeout=timeout, headers={'User-Agent':'BoxtrayCRM/1.0'}, allow_redirects=True)
+        return re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', r.text[:80000])[:5]
+    except: return []
+
+def _web_search(query, max_results=8, timeout=15):
+    """Google Search via Serper API + scrape result pages for emails."""
+    import sys, requests as req
+    try:
+        resp = req.post('https://google.serper.dev/search',
+            json={'q': query, 'num': 6},
             headers={'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json'},
             timeout=timeout)
         data = resp.json()
@@ -520,15 +536,23 @@ def _web_search(query, max_results=8, timeout=15):
     for r in organic[:max_results]:
         href = r.get('link', '')
         title = r.get('title', '')
-        body = r.get('snippet', '')
+        snippet = r.get('snippet', '')
         domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-        results.append({'href': href, 'title': title, 'body': body})
 
-    sys.stderr.write(f'[Serper] Total: {len(results)}\n')
+        # Step 1: extract from snippet
+        emails = extract_email(snippet + ' ' + title)
+        # Step 2: visit page
+        if not emails:
+            try: emails = fetch_page_email(href)
+            except: pass
+        email = ','.join(emails[:2]) if emails else ''
+        results.append({'href':href,'title':title,'body':snippet,'domain':domain,'email':email})
+
+    sys.stderr.write(f'[Serper] {sum(1 for x in results if x[\"email\"])} with email / {len(results)} total\n')
     return results
 
 def auto_search(sid, keywords, region):
-    """Search web and store results."""
+    """Search web, extract emails, validate via DNS MX."""
     import sys, traceback
     db = None
     try:
@@ -542,51 +566,47 @@ def auto_search(sid, keywords, region):
 
         def tq(sql, params=()):
             if USE_PG:
-                sql = sql.replace('?', '%s'); c = db.cursor(); c.execute(sql, params); db.commit(); return c
+                sql = sql.replace('?','%s'); c = db.cursor(); c.execute(sql, params); db.commit(); return c
             else:
                 return db.execute(sql, params)
         def tq1(sql, params=()): return tq(sql, params).fetchone()
         def tqi(sql, params=()):
-            sql = sql.replace(RETURNING, '')
             if USE_PG:
-                sql = sql.replace('?','%s').replace(RETURNING,'') + ' RETURNING id'
-                c = db.cursor(); c.execute(sql, params); db.commit(); return c.fetchone()['id']
+                c = db.cursor(); c.execute(sql.replace('?','%s') + ' RETURNING id', params); db.commit()
+                return c.fetchone()['id']
             else:
                 db.execute(sql, params); db.commit()
                 return db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         all_leads, seen, loc = [], set(), region or ''
-        for r in _web_search(f'{keywords} email contact OR "info@" OR "sales@" OR "contact@"', 8):
-            href = r.get('href','')
-            body = r.get('body','')
-            title = r.get('title','') or href.split('/')[-2].replace('-',' ').title() if '/' in href else ''
-            domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-            if not domain or domain in seen: continue
+        for r in _web_search(f'{keywords} contact email', 8):
+            href, title, body, domain = r['href'], r['title'], r['body'], r.get('domain','')
+            email_str = r.get('email','')
+            if domain in seen: continue
             seen.add(domain)
-            email = extract_email(body) or extract_email(title)
             company = title.split(' - ')[0].split(' | ')[0][:80]
-            all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'Google','notes':body[:200]})
+            all_leads.append({'company':company,'email':email_str,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'Google','notes':body[:200]})
 
-        sys.stderr.write(f'[Search #{sid}] {len(all_leads)} leads\n')
+        sys.stderr.write(f'[Search #{sid}] {len(all_leads)} leads, {sum(1 for l in all_leads if l[\"email\"])} with email\n')
+
         for lead in all_leads:
             lead.setdefault('contact_name',''); lead.setdefault('title',''); lead.setdefault('address','')
-            if lead.get('email') and tq1("SELECT id FROM customers WHERE email=?",(lead['email'],)): continue
-            tqi(f"INSERT INTO search_leads (search_id,company,email,contact_name,title,phone,address,country,region,website,source,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?){RETURNING}",
-                (sid,lead['company'],lead.get('email',''),lead['contact_name'],lead['title'],lead['phone'],lead['address'],lead['country'],lead['region'],lead['website'],lead['source'],lead['notes']))
-        for lead in all_leads:
-            if lead.get('email') and '@' in lead['email']:
-                try:
-                    v,d = smtp_probe(lead['email'])
-                    if not v and v is not False:
-                        d = 'cloud_runtime_blocked' if IS_RENDER else (d or 'verify_failed')
-                    tq("UPDATE search_leads SET email_validated=?, validation_detail=? WHERE search_id=? AND email=?", ('Yes' if v else ('No' if v is False else 'Unknown'), d, sid, lead['email']))
-                except: pass
+            emails = (lead.get('email') or '').split(',')
+            for email in emails:
+                email = email.strip()
+                if not email or tq1("SELECT id FROM customers WHERE email=?",(email,)): continue
+                domain = email.split('@')[-1] if '@' in email else ''
+                mx_ok, mx_d = check_mx(domain) if domain else (False, 'no_domain')
+                status = 'Yes' if mx_ok else 'No'
+                tqi("INSERT INTO search_leads (search_id,company,email,contact_name,title,phone,address,country,region,website,source,notes,email_validated,validation_detail) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (sid,lead['company'],email,lead['contact_name'],lead['title'],lead['phone'],lead['address'],lead['country'],lead['region'],lead['website'],lead['source'],lead['notes'],status,mx_d))
+
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         tq(f"UPDATE search_requests SET status='completed', processed_at='{now}' WHERE id=?",(sid,))
     except Exception as e:
         sys.stderr.write(f'[Search #{sid}] FAILED: {traceback.format_exc()}\n')
         try:
-            err_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        err_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             tq(f"UPDATE search_requests SET status='error', processed_at='{err_now}' WHERE id=?",(sid,))
         except: pass
     finally:
