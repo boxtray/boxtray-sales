@@ -501,57 +501,25 @@ def extract_phone(text):
     return m[0].strip() if m else ''
 
 def auto_search(sid, keywords, region):
-    """Multi-engine search: DuckDuckGo + LinkedIn + Business Directories."""
+    """Search DuckDuckGo and store results."""
+    import sys
     try:
         from ddgs import DDGS
-        all_leads, seen_domains, loc = [], set(), region or ''
+        all_leads, seen, loc = [], set(), region or ''
+        query = f'{keywords} email contact'
 
-        # Strategy 1: DuckDuckGo general web
         try:
-            for r in DDGS().text(f'{keywords} email contact', max_results=5):
+            for r in DDGS().text(query, max_results=8):
                 body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
                 domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-                if domain in seen_domains: continue
-                seen_domains.add(domain)
+                if not domain or domain in seen: continue
+                seen.add(domain)
                 email = extract_email(body) or extract_email(title)
-                company = title.split(' - ')[0].split(' | ')[0].split(' \u2013 ')[0][:80]
+                company = title.split(' - ')[0].split(' | ')[0][:80]
                 all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'DuckDuckGo','notes':body[:200]})
-        except: pass
+        except Exception as e:
+            sys.stderr.write(f'DDG search error: {e}\n')
 
-        # Strategy 2: LinkedIn company pages
-        try:
-            for r in DDGS().text(f'site:linkedin.com/company {keywords}', max_results=3):
-                body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
-                company_name = title.replace('| LinkedIn','').replace('LinkedIn','').split(' - ')[0].strip()[:80] or title[:80]
-                all_leads.append({'company':company_name,'email':'','phone':'','country':loc,'region':loc,'website':href,'source':'LinkedIn','notes':body[:200]})
-        except: pass
-
-        # Strategy 3: Business directories
-        try:
-            for r in DDGS().text(f'{keywords} yellowpages OR thomasnet OR kompass OR tradekey', max_results=3):
-                body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
-                domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-                if domain in seen_domains: continue
-                seen_domains.add(domain)
-                email = extract_email(body) or extract_email(title)
-                company = title.split(' - ')[0].split(' | ')[0][:80]
-                src = 'YellowPages' if 'yellowpages' in domain else ('ThomasNet' if 'thomasnet' in domain else ('Kompass' if 'kompass' in domain else 'Business Directory'))
-                all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':src,'notes':body[:200]})
-        except: pass
-
-        # Strategy 4: Import/export directories
-        try:
-            for r in DDGS().text(f'{keywords} import export distributor wholesale', max_results=3):
-                body, title, href = r.get('body',''), r.get('title',''), r.get('href','')
-                domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-                if domain in seen_domains: continue
-                seen_domains.add(domain)
-                email = extract_email(body) or extract_email(title)
-                company = title.split(' - ')[0].split(' | ')[0][:80]
-                all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'Google Directory','notes':body[:200]})
-        except: pass
-
-        # Store + validate
         for lead in all_leads:
             lead.setdefault('contact_name',''); lead.setdefault('title',''); lead.setdefault('address','')
             if lead.get('email') and q1("SELECT id FROM customers WHERE email=?",(lead['email'],)): continue
@@ -564,7 +532,11 @@ def auto_search(sid, keywords, region):
                     q("UPDATE search_leads SET email_validated=?, validation_detail=? WHERE search_id=? AND email=?", ('Yes' if v else ('No' if v is False else 'Unknown'), d, sid, lead['email']))
                 except: pass
         q(f"UPDATE search_requests SET status='completed', processed_at={NOW_SQL} WHERE id=?",(sid,))
-    except: q(f"UPDATE search_requests SET status='error', processed_at={NOW_SQL} WHERE id=?",(sid,))
+    except Exception as e:
+        sys.stderr.write(f'auto_search error: {e}\n')
+        try:
+            q(f"UPDATE search_requests SET status='error', processed_at={NOW_SQL} WHERE id=?",(sid,))
+        except: pass
 
 
 
