@@ -531,9 +531,32 @@ def _web_search(query, max_results=5, timeout=15):
 def auto_search(sid, keywords, region):
     """Search web and store results."""
     import sys, traceback
+    db = None
     try:
-        all_leads, seen, loc = [], set(), region or ''
+        if USE_PG:
+            db = psycopg2.connect(DATABASE_URL, sslmode='require')
+            db.cursor_factory = psycopg2.extras.RealDictCursor
+        else:
+            DB_PATH = BASE / 'data' / 'crm.db'
+            os.makedirs(BASE / 'data', exist_ok=True)
+            db = sqlite3.connect(str(DB_PATH))
 
+        def tq(sql, params=()):
+            if USE_PG:
+                sql = sql.replace('?', '%s'); c = db.cursor(); c.execute(sql, params); db.commit(); return c
+            else:
+                return db.execute(sql, params)
+        def tq1(sql, params=()): return tq(sql, params).fetchone()
+        def tqi(sql, params=()):
+            sql = sql.replace(RETURNING, '')
+            if USE_PG:
+                sql = sql.replace('?','%s').replace(RETURNING,'') + ' RETURNING id'
+                c = db.cursor(); c.execute(sql, params); db.commit(); return c.fetchone()['id']
+            else:
+                db.execute(sql, params); db.commit()
+                return db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        all_leads, seen, loc = [], set(), region or ''
         for r in _web_search(f'{keywords} email contact', 8):
             href, body, title = r['href'], r['body'], r['title']
             domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
@@ -544,24 +567,26 @@ def auto_search(sid, keywords, region):
             all_leads.append({'company':company,'email':email,'phone':extract_phone(body),'country':loc,'region':loc,'website':domain,'source':'DuckDuckGo','notes':body[:200]})
 
         sys.stderr.write(f'[Search #{sid}] {len(all_leads)} leads\n')
-
         for lead in all_leads:
             lead.setdefault('contact_name',''); lead.setdefault('title',''); lead.setdefault('address','')
-            if lead.get('email') and q1("SELECT id FROM customers WHERE email=?",(lead['email'],)): continue
-            qi(f"INSERT INTO search_leads (search_id,company,email,contact_name,title,phone,address,country,region,website,source,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?){RETURNING}",
-               (sid,lead['company'],lead.get('email',''),lead['contact_name'],lead['title'],lead['phone'],lead['address'],lead['country'],lead['region'],lead['website'],lead['source'],lead['notes']))
+            if lead.get('email') and tq1("SELECT id FROM customers WHERE email=?",(lead['email'],)): continue
+            tqi(f"INSERT INTO search_leads (search_id,company,email,contact_name,title,phone,address,country,region,website,source,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?){RETURNING}",
+                (sid,lead['company'],lead.get('email',''),lead['contact_name'],lead['title'],lead['phone'],lead['address'],lead['country'],lead['region'],lead['website'],lead['source'],lead['notes']))
         for lead in all_leads:
             if lead.get('email') and '@' in lead['email']:
                 try:
                     v,d = smtp_probe(lead['email'])
-                    q("UPDATE search_leads SET email_validated=?, validation_detail=? WHERE search_id=? AND email=?", ('Yes' if v else ('No' if v is False else 'Unknown'), d, sid, lead['email']))
+                    tq("UPDATE search_leads SET email_validated=?, validation_detail=? WHERE search_id=? AND email=?", ('Yes' if v else ('No' if v is False else 'Unknown'), d, sid, lead['email']))
                 except: pass
-        q(f"UPDATE search_requests SET status='completed', processed_at={NOW_SQL} WHERE id=?",(sid,))
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        tq(f"UPDATE search_requests SET status='completed', processed_at='{now}' WHERE id=?",(sid,))
     except Exception as e:
         sys.stderr.write(f'[Search #{sid}] FAILED: {traceback.format_exc()}\n')
         try:
-            q(f"UPDATE search_requests SET status='error', processed_at={NOW_SQL} WHERE id=?",(sid,))
+            tq(f"UPDATE search_requests SET status='error', processed_at='{datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\")}' WHERE id=?",(sid,))
         except: pass
+    finally:
+        if db: db.close()
 
 
 
