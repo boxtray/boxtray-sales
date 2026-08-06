@@ -14,6 +14,7 @@ BASE = Path(__file__).parent
 SALES_DIR = BASE.parent if BASE.name == 'web_app' else Path(os.getcwd())
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
+SERPER_KEY = os.environ.get('SERPER_KEY', '9f0ff236dc57a23599f6b3ce3210dee7cc1bb581')
 IS_RENDER = bool(os.environ.get('RENDER', '')) or bool(os.environ.get('PORT', ''))
 
 # On Render, use Supabase pooler (IPv4, works)
@@ -501,47 +502,29 @@ def extract_phone(text):
     return m[0].strip() if m else ''
 
 def _web_search(query, max_results=8, timeout=15):
-    """DuckDuckGo Instant Answer JSON API - no HTML parsing."""
+    """Google Search via Serper API."""
     import sys, requests, re
     try:
-        resp = requests.get('https://api.duckduckgo.com/',
-            params={'q': query, 'format': 'json', 'no_html': 1, 'skip_disambig': 1},
-            headers={'User-Agent': 'BoxtrayCRM/1.0'},
+        resp = requests.post('https://google.serper.dev/search',
+            json={'q': query, 'num': 10},
+            headers={'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json'},
             timeout=timeout)
         data = resp.json()
-        topics_count = len(data.get('RelatedTopics', []))
-        sys.stderr.write(f'[DDG] API ok, topics={topics_count}\n')
+        organic = data.get('organic', [])
+        sys.stderr.write(f'[Serper] {len(organic)} results\n')
     except Exception as e:
-        sys.stderr.write(f'[DDG] FAIL: {e}\n')
+        sys.stderr.write(f'[Serper] FAIL: {e}\n')
         return []
 
     results = []
-    for t in data.get('RelatedTopics', []):
-        if 'Text' in t and 'FirstURL' in t:
-            href = t['FirstURL']
-            text = t['Text']
-            title = text.split(' - ')[0] if ' - ' in text else text[:80]
-            body = text.split(' - ')[1] if ' - ' in text else ''
-            domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-            results.append({'href': href, 'title': title, 'body': body})
-        if len(results) >= max_results: break
+    for r in organic[:max_results]:
+        href = r.get('link', '')
+        title = r.get('title', '')
+        body = r.get('snippet', '')
+        domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
+        results.append({'href': href, 'title': title, 'body': body})
 
-    # Also try duckduckgo_html if API returns no topics
-    if not results:
-        try:
-            resp2 = requests.post('https://html.duckduckgo.com/html/',
-                data={'q': query},
-                headers={'User-Agent': 'Mozilla/5.0 BoxtrayCRM/1.0'},
-                timeout=timeout)
-            links = re.findall('<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', resp2.text, re.DOTALL)
-            for href, title in links[:max_results]:
-                domain = (re.findall(r'https?://(?:www\.)?([^/]+)', href) or [''])[0]
-                results.append({'href': href, 'title': re.sub(r'<[^>]+>','',title).strip(), 'body': ''})
-            sys.stderr.write(f'[DDG] HTML fallback: {len(results)} results\n')
-        except Exception as e2:
-            sys.stderr.write(f'[DDG] HTML fallback FAIL: {e2}\n')
-
-    sys.stderr.write(f'[DDG] Total: {len(results)}\n')
+    sys.stderr.write(f'[Serper] Total: {len(results)}\n')
     return results
 
 def auto_search(sid, keywords, region):
