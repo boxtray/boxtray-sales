@@ -98,7 +98,8 @@ def qi(sql, params=()):
     """Execute INSERT and return new ID."""
     cur = pg_adapt(sql, params)
     if USE_PG:
-        return cur.fetchone()[0]
+        row = cur.fetchone()
+        return row['id'] if isinstance(row, dict) else row[0]
     else:
         return get_db().execute("SELECT last_insert_rowid()").fetchone()[0]
 
