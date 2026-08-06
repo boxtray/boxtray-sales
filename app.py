@@ -556,7 +556,7 @@ def auto_search(sid, keywords, region):
                 return db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         all_leads, seen, loc = [], set(), region or ''
-        for r in _web_search(f'{keywords} email contact', 8):
+        for r in _web_search(f'{keywords} email contact OR "info@" OR "sales@" OR "contact@"', 8):
             href = r.get('href','')
             body = r.get('body','')
             title = r.get('title','') or href.split('/')[-2].replace('-',' ').title() if '/' in href else ''
@@ -577,6 +577,8 @@ def auto_search(sid, keywords, region):
             if lead.get('email') and '@' in lead['email']:
                 try:
                     v,d = smtp_probe(lead['email'])
+                    if not v and v is not False:
+                        d = 'cloud_runtime_blocked' if IS_RENDER else (d or 'verify_failed')
                     tq("UPDATE search_leads SET email_validated=?, validation_detail=? WHERE search_id=? AND email=?", ('Yes' if v else ('No' if v is False else 'Unknown'), d, sid, lead['email']))
                 except: pass
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
