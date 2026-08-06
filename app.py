@@ -509,7 +509,8 @@ def _web_search(query, max_results=8, timeout=15):
             headers={'User-Agent': 'BoxtrayCRM/1.0'},
             timeout=timeout)
         data = resp.json()
-        sys.stderr.write(f'[DDG] API ok, topics={len(data.get(\"RelatedTopics\",[]))}\n')
+        topics_count = len(data.get('RelatedTopics', []))
+        sys.stderr.write(f'[DDG] API ok, topics={topics_count}\n')
     except Exception as e:
         sys.stderr.write(f'[DDG] FAIL: {e}\n')
         return []
