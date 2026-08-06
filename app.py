@@ -580,7 +580,8 @@ def ai_search():
 @login_required
 @app.route('/api/ai-search/status')
 def ai_search_status():
-    rows = qr("SELECT * FROM search_requests WHERE created_at >= datetime('now','-24 hours') ORDER BY created_at DESC LIMIT 20")
+    since = (datetime.now() - timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
+    rows = qr("SELECT * FROM search_requests WHERE created_at >= ? ORDER BY created_at DESC LIMIT 20", (since,))
     result = []
     for r in rows:
         leads = qr("SELECT * FROM search_leads WHERE search_id=?",(r['id'],))
