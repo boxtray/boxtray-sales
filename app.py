@@ -14,11 +14,11 @@ SALES_DIR = BASE.parent if BASE.name == 'web_app' else Path(os.getcwd())
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 IS_RENDER = bool(os.environ.get('RENDER', '')) or bool(os.environ.get('PORT', ''))
 
-# On Render, default to Supabase pooler if no DATABASE_URL set
-if IS_RENDER and not DATABASE_URL:
+# On Render, use Supabase pooler (IPv4, works)
+if IS_RENDER:
     DATABASE_URL = 'postgresql://postgres.boxtray:001745Xiaoming@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres'
 
-USE_PG = bool(DATABASE_URL)
+USE_PG = bool(DATABASE_URL) if not IS_RENDER else True
 
 if USE_PG:
     import psycopg2
