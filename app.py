@@ -517,8 +517,8 @@ def _web_search(query, max_results=5, timeout=15):
 
     # Parse results: <a href="URL">Title</a> ... <td class="result-snippet">snippet</td>
     results = []
-    links = re.findall(r'<a[^>]+href="(https?://[^"]+)"[^>]*>(.*?)</a>', html, re.DOTALL)
-    snippets = re.findall(r'class="result-snippet">(.*?)</td>', html, re.DOTALL)
+    links = re.findall(r"<a[^>]+href=[\"'](https?://[^\"']+)[\"'][^>]*>(.*?)</a>", html, re.DOTALL)
+    snippets = re.findall(r"class=[\"']result-snippet[\"']>(.*?)</td>", html, re.DOTALL)
 
     for i in range(min(len(links), len(snippets), max_results)):
         href = links[i][0]
